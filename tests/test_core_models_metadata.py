@@ -145,6 +145,89 @@ class ModelsAndMetadataTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             model_relations(BrokenRelationModel)
 
+    def test_model_relations_accept_foreign_key_alias(self) -> None:
+        @dataclass
+        class AliasRelationModel:
+            id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+            company_id: Optional[int] = None
+
+            __relations__ = {
+                "company": {
+                    "model": CompanyModel,
+                    "foreign_key": "company_id",
+                    "remote_key": "id",
+                    "type": "belongs_to",
+                }
+            }
+
+        relations = model_relations(AliasRelationModel)
+        self.assertEqual(relations["company"].local_key, "company_id")
+        self.assertFalse(relations["company"].many)
+
+    def test_model_relations_requires_mapping_type(self) -> None:
+        @dataclass
+        class InvalidRelationsTypeModel:
+            id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+            __relations__ = []  # type: ignore[assignment]
+
+        with self.assertRaises(TypeError):
+            model_relations(InvalidRelationsTypeModel)
+
+    def test_model_relations_validate_remote_key(self) -> None:
+        @dataclass
+        class InvalidRemoteKeyModel:
+            id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+            company_id: Optional[int] = None
+
+            __relations__ = {
+                "company": {
+                    "model": CompanyModel,
+                    "local_key": "company_id",
+                    "remote_key": "missing_remote",
+                }
+            }
+
+        with self.assertRaises(ValueError):
+            model_relations(InvalidRemoteKeyModel)
+
+    def test_model_relations_validate_unsupported_relation_type(self) -> None:
+        @dataclass
+        class InvalidRelationTypeModel:
+            id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+            company_id: Optional[int] = None
+
+            __relations__ = {
+                "company": {
+                    "model": CompanyModel,
+                    "local_key": "company_id",
+                    "remote_key": "id",
+                    "type": "many_to_many",
+                }
+            }
+
+        with self.assertRaises(ValueError):
+            model_relations(InvalidRelationTypeModel)
+
+    def test_model_relations_validate_model_must_be_dataclass(self) -> None:
+        class NotDataclass:
+            pass
+
+        @dataclass
+        class InvalidRelationModelType:
+            id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+            company_id: Optional[int] = None
+
+            __relations__ = {
+                "company": {
+                    "model": NotDataclass,
+                    "local_key": "company_id",
+                    "remote_key": "id",
+                }
+            }
+
+        with self.assertRaises(TypeError):
+            model_relations(InvalidRelationModelType)
+
     def test_build_model_metadata_requires_single_pk(self) -> None:
         with self.assertRaises(ValueError):
             build_model_metadata(MultiPkModel)

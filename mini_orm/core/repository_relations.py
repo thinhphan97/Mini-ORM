@@ -138,10 +138,13 @@ class RelationCoordinator(Generic[T]):
         *,
         include: Sequence[str],
     ) -> list[dict[str, Any]]:
+        include_names = self._normalize_include(include)
+        for relation_name in include_names:
+            self._relation_spec(relation_name)
+
         if not objects:
             return []
 
-        include_names = self._normalize_include(include)
         results: list[dict[str, Any]] = [dict() for _ in objects]
 
         for relation_name in include_names:

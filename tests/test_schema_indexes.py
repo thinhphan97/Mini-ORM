@@ -9,6 +9,7 @@ from typing import Optional
 
 from mini_orm import (
     Database,
+    MySQLDialect,
     SQLiteDialect,
     apply_schema,
     create_index_sql,
@@ -92,6 +93,28 @@ class ChildModel:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
     parent_id: Optional[int] = field(default=None, metadata={"fk": (ParentModel, "id")})
     name: str = ""
+
+
+@dataclass
+class ChildModelFkString:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    parent_id: Optional[int] = field(default=None, metadata={"fk": "parentmodel.id"})
+
+
+@dataclass
+class ChildModelFkMappingWithModel:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    parent_id: Optional[int] = field(
+        default=None, metadata={"fk": {"model": ParentModel, "column": "id"}}
+    )
+
+
+@dataclass
+class ChildModelFkMappingWithTable:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    parent_id: Optional[int] = field(
+        default=None, metadata={"fk": {"table": "parentmodel", "column": "id"}}
+    )
 
 
 class SchemaIndexTests(unittest.TestCase):
@@ -190,9 +213,80 @@ class SchemaIndexTests(unittest.TestCase):
         self.assertTrue(any("CREATE INDEX IF NOT EXISTS" in sql for sql in sql_list[1:]))
         self.assertTrue(any("CREATE UNIQUE INDEX IF NOT EXISTS" in sql for sql in sql_list[1:]))
 
+    def test_create_schema_sql_if_not_exists_omits_clause_for_mysql_indexes(self) -> None:
+        mysql_sql = create_schema_sql(IndexedUser, MySQLDialect(), if_not_exists=True)
+        self.assertTrue(mysql_sql[0].startswith("CREATE TABLE IF NOT EXISTS"))
+        for sql in mysql_sql[1:]:
+            self.assertNotIn("IF NOT EXISTS", sql)
+
     def test_create_table_sql_supports_foreign_key_metadata(self) -> None:
         sql = create_table_sql(ChildModel, self.dialect)
         self.assertIn('"parent_id" INTEGER NULL REFERENCES "parentmodel" ("id")', sql)
+
+    def test_create_table_sql_supports_foreign_key_string_and_mapping_formats(self) -> None:
+        sql_string = create_table_sql(ChildModelFkString, self.dialect)
+        sql_mapping_model = create_table_sql(ChildModelFkMappingWithModel, self.dialect)
+        sql_mapping_table = create_table_sql(ChildModelFkMappingWithTable, self.dialect)
+
+        self.assertIn('REFERENCES "parentmodel" ("id")', sql_string)
+        self.assertIn('REFERENCES "parentmodel" ("id")', sql_mapping_model)
+        self.assertIn('REFERENCES "parentmodel" ("id")', sql_mapping_table)
+
+    def test_create_table_sql_rejects_invalid_fk_string(self) -> None:
+        @dataclass
+        class InvalidFkStringModel:
+            id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+            parent_id: Optional[int] = field(default=None, metadata={"fk": "invalid_fk"})
+
+        with self.assertRaises(ValueError):
+            create_table_sql(InvalidFkStringModel, self.dialect)
+
+    def test_create_table_sql_rejects_invalid_fk_sequence(self) -> None:
+        @dataclass
+        class InvalidFkSequenceModel:
+            id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+            parent_id: Optional[int] = field(default=None, metadata={"fk": (ParentModel,)})
+
+        with self.assertRaises(ValueError):
+            create_table_sql(InvalidFkSequenceModel, self.dialect)
+
+    def test_create_table_sql_rejects_invalid_fk_mapping_column(self) -> None:
+        @dataclass
+        class InvalidFkColumnModel:
+            id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+            parent_id: Optional[int] = field(
+                default=None,
+                metadata={"fk": {"table": "parentmodel", "column": 123}},
+            )
+
+        with self.assertRaises(TypeError):
+            create_table_sql(InvalidFkColumnModel, self.dialect)
+
+    def test_create_table_sql_rejects_fk_model_that_is_not_dataclass(self) -> None:
+        class Plain:
+            pass
+
+        @dataclass
+        class InvalidFkModelRef:
+            id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+            parent_id: Optional[int] = field(default=None, metadata={"fk": (Plain, "id")})
+
+        with self.assertRaises(TypeError):
+            create_table_sql(InvalidFkModelRef, self.dialect)
+
+    def test_sqlite_enforces_foreign_key_when_clause_exists(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.execute("PRAGMA foreign_keys = ON;")
+        cursor = conn.cursor()
+        cursor.execute(create_table_sql(ParentModel, self.dialect))
+        cursor.execute(create_table_sql(ChildModel, self.dialect))
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            cursor.execute('INSERT INTO "childmodel" ("parent_id", "name") VALUES (999, "x");')
+
+        cursor.execute('INSERT INTO "parentmodel" ("title") VALUES ("p1");')
+        cursor.execute('INSERT INTO "childmodel" ("parent_id", "name") VALUES (1, "ok");')
+        conn.close()
 
     def test_apply_schema_creates_table_and_indexes(self) -> None:
         conn = sqlite3.connect(":memory:")

@@ -114,6 +114,15 @@ class RepositorySQLiteTests(unittest.TestCase):
                 self.repo.insert(user)
         return users
 
+    def _relation_repositories(
+        self,
+    ) -> tuple[sqlite3.Connection, Repository[AuthorRow], Repository[PostRow]]:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, AuthorRow)
+        apply_schema(db, PostRow)
+        return conn, Repository[AuthorRow](db, AuthorRow), Repository[PostRow](db, PostRow)
+
     def test_insert_assigns_auto_pk(self) -> None:
         user = UserRow(email="new@example.com", age=20)
         inserted = self.repo.insert(user)
@@ -357,6 +366,90 @@ class RepositorySQLiteTests(unittest.TestCase):
         self.assertEqual(len(posts_with_author), 2)
         self.assertTrue(all(item.relations["author"] is not None for item in posts_with_author))
         self.assertTrue(all(item.relations["author"].name == "Reader" for item in posts_with_author))
+        conn.close()
+
+    def test_get_related_returns_none_for_missing_row(self) -> None:
+        conn, author_repo, _ = self._relation_repositories()
+        self.assertIsNone(author_repo.get_related(9999, include=["posts"]))
+        conn.close()
+
+    def test_create_with_unknown_relation_raises(self) -> None:
+        conn, author_repo, post_repo = self._relation_repositories()
+        with self.assertRaises(ValueError):
+            author_repo.create(AuthorRow(name="A"), relations={"missing_relation": []})
+
+        self.assertEqual(author_repo.count(), 0)
+        self.assertEqual(post_repo.count(), 0)
+        conn.close()
+
+    def test_create_has_many_requires_sequence_and_rolls_back(self) -> None:
+        conn, author_repo, post_repo = self._relation_repositories()
+        with self.assertRaises(TypeError):
+            author_repo.create(
+                AuthorRow(name="A"),
+                relations={"posts": PostRow(title="must-be-sequence")},  # type: ignore[arg-type]
+            )
+
+        self.assertEqual(author_repo.count(), 0)
+        self.assertEqual(post_repo.count(), 0)
+        conn.close()
+
+    def test_create_has_many_rejects_invalid_child_type_and_rolls_back(self) -> None:
+        conn, author_repo, post_repo = self._relation_repositories()
+        with self.assertRaises(TypeError):
+            author_repo.create(
+                AuthorRow(name="A"),
+                relations={
+                    "posts": [
+                        PostRow(title="valid"),
+                        AuthorRow(name="invalid-child"),  # type: ignore[list-item]
+                    ]
+                },
+            )
+
+        self.assertEqual(author_repo.count(), 0)
+        self.assertEqual(post_repo.count(), 0)
+        conn.close()
+
+    def test_create_belongs_to_requires_model_type(self) -> None:
+        conn, author_repo, post_repo = self._relation_repositories()
+        with self.assertRaises(TypeError):
+            post_repo.create(PostRow(title="invalid"), relations={"author": "not-a-model"})  # type: ignore[arg-type]
+
+        self.assertEqual(author_repo.count(), 0)
+        self.assertEqual(post_repo.count(), 0)
+        conn.close()
+
+    def test_get_related_for_belongs_to_returns_none_when_fk_is_null(self) -> None:
+        conn, _, post_repo = self._relation_repositories()
+        post = post_repo.insert(PostRow(title="Orphan", author_id=None))
+        result = post_repo.get_related(post.id, include=["author"])
+
+        self.assertIsNotNone(result)
+        self.assertIsNone(result.relations["author"])
+        conn.close()
+
+    def test_list_related_validates_include_items(self) -> None:
+        conn, _, post_repo = self._relation_repositories()
+        with self.assertRaises(TypeError):
+            post_repo.list_related(include=["author", ""])
+        with self.assertRaises(TypeError):
+            post_repo.list_related(include=[123])  # type: ignore[list-item]
+        conn.close()
+
+    def test_list_related_validates_unknown_relation_name(self) -> None:
+        conn, _, post_repo = self._relation_repositories()
+        with self.assertRaises(ValueError):
+            post_repo.list_related(include=["missing"])
+        conn.close()
+
+    def test_list_related_deduplicates_include_names(self) -> None:
+        conn, _, post_repo = self._relation_repositories()
+        post_repo.create(PostRow(title="One"), relations={"author": AuthorRow(name="Single")})
+
+        rows = post_repo.list_related(include=["author", "author"])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(list(rows[0].relations.keys()), ["author"])
         conn.close()
 
 
