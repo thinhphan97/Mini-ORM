@@ -80,6 +80,19 @@ hits = repo.query([0.1, 0.2, 0.25], top_k=5)
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
+## MySQL note
+
+When using `MySQLDialect`, current type mapping treats Python `str` fields as SQL `TEXT`.
+MySQL cannot create `INDEX`/`UNIQUE` directly on `TEXT` columns without a key length,
+so schema apply may fail with errors like:
+
+`BLOB/TEXT column '...' used in key specification without a key length`
+
+To avoid this:
+
+- do not set `index=True` or `unique_index=True` on `str` fields in MySQL right now, or
+- customize your schema/type mapping to use `VARCHAR(n)` for indexed string columns.
+
 ## Documentation site (MkDocs)
 
 ```bash
