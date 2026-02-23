@@ -14,10 +14,10 @@ from .schema_foreign_keys import parse_fk_reference
 def column_sql(field: Any, dialect: DialectPort) -> str:
     """Build one column definition SQL fragment."""
 
-    column_name = dialect.q(field.name)
-
     if field.metadata.get("pk") and field.metadata.get("auto"):
-        return f"{column_name} INTEGER PRIMARY KEY"
+        return dialect.auto_pk_sql(field.name)
+
+    column_name = dialect.q(field.name)
 
     sql_parts = [column_name, resolve_sql_type(field.type)]
     sql_parts.append("NULL" if is_nullable(field) else "NOT NULL")

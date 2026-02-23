@@ -29,6 +29,11 @@ class Dialect:
             return "%s"
         raise ValueError(f"Unsupported paramstyle: {self.paramstyle}")
 
+    def auto_pk_sql(self, pk_name: str) -> str:
+        """Return SQL fragment for auto-increment primary key column."""
+
+        return f"{self.q(pk_name)} INTEGER PRIMARY KEY"
+
     def returning_clause(self, pk_name: str) -> str:
         """Return `RETURNING` clause when dialect supports it."""
 
@@ -50,6 +55,9 @@ class SQLiteDialect(Dialect):
     quote_char = '"'
     supports_returning = True
 
+    def auto_pk_sql(self, pk_name: str) -> str:
+        return f"{self.q(pk_name)} INTEGER PRIMARY KEY"
+
 
 class PostgresDialect(Dialect):
     """PostgreSQL dialect (`%s` positional parameters)."""
@@ -59,6 +67,9 @@ class PostgresDialect(Dialect):
     quote_char = '"'
     supports_returning = True
 
+    def auto_pk_sql(self, pk_name: str) -> str:
+        return f"{self.q(pk_name)} SERIAL PRIMARY KEY"
+
 
 class MySQLDialect(Dialect):
     """MySQL dialect (`%s` positional parameters, no `RETURNING`)."""
@@ -67,3 +78,6 @@ class MySQLDialect(Dialect):
     paramstyle = "format"
     quote_char = "`"
     supports_returning = False
+
+    def auto_pk_sql(self, pk_name: str) -> str:
+        return f"{self.q(pk_name)} INT AUTO_INCREMENT PRIMARY KEY"

@@ -12,7 +12,7 @@ from mini_orm.ports.db_api.dialects import Dialect
 @dataclass
 class UserRow:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
-    email: str = ""
+    email: str = field(default="", metadata={"unique_index": True})
     age: Optional[int] = None
 
 
@@ -57,6 +57,12 @@ class OnlyPkRow:
 class MultiPkRow:
     id1: int = field(default=0, metadata={"pk": True})
     id2: int = field(default=0, metadata={"pk": True})
+
+
+@dataclass
+class NonUniqueLookupRow:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
 
 
 class PlainModel:
@@ -278,9 +284,57 @@ class RepositorySQLiteTests(unittest.TestCase):
         self.assertEqual(first.age, 33)
         self.assertEqual(second.id, first.id)
 
+    def test_get_or_create_insert_first_conflict_path(self) -> None:
+        existing = self.repo.insert(UserRow(email="conflict@example.com", age=20))
+
+        insert_call_count = 0
+        original_insert = self.repo.insert
+
+        def tracked_insert(obj: UserRow) -> UserRow:
+            nonlocal insert_call_count
+            insert_call_count += 1
+            return original_insert(obj)
+
+        self.repo.insert = tracked_insert  # type: ignore[method-assign]
+        row, created = self.repo.get_or_create(
+            lookup={"email": "conflict@example.com"},
+            defaults={"age": 99},
+        )
+
+        self.assertFalse(created)
+        self.assertEqual(insert_call_count, 1)
+        self.assertEqual(row.id, existing.id)
+
     def test_get_or_create_requires_lookup(self) -> None:
         with self.assertRaises(ValueError):
             self.repo.get_or_create(lookup={})
+
+    def test_get_or_create_requires_unique_lookup_constraint(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, NonUniqueLookupRow)
+        repo = Repository[NonUniqueLookupRow](db, NonUniqueLookupRow)
+
+        with self.assertRaises(ValueError):
+            repo.get_or_create(lookup={"email": "x@example.com"})
+        conn.close()
+
+    def test_get_or_create_reraises_non_integrity_errors(self) -> None:
+        def failing_insert(obj: UserRow) -> UserRow:  # noqa: ARG001
+            raise RuntimeError("boom")
+
+        self.repo.insert = failing_insert  # type: ignore[method-assign]
+        with self.assertRaises(RuntimeError):
+            self.repo.get_or_create(lookup={"email": "boom@example.com"})
+
+    def test_get_or_create_reraises_integrity_when_row_still_missing(self) -> None:
+        def failing_insert(obj: UserRow) -> UserRow:  # noqa: ARG001
+            raise sqlite3.IntegrityError("forced conflict")
+
+        self.repo.insert = failing_insert  # type: ignore[method-assign]
+        self.repo.list = lambda *args, **kwargs: []  # type: ignore[method-assign]
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.repo.get_or_create(lookup={"email": "missing@example.com"})
 
     def test_repository_requires_dataclass_and_single_pk(self) -> None:
         with self.assertRaises(TypeError):

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence as SequenceABC
 from typing import Any, Mapping, Sequence
 
 from .conditions import C
-from .models import row_to_model, to_dict
+from .models import model_fields, row_to_model, to_dict
 from .query_builder import append_limit_offset, compile_order_by, compile_where
 
 
@@ -282,20 +283,89 @@ def get_or_create(
     lookup: Mapping[str, Any],
     defaults: Mapping[str, Any] | None = None,
 ) -> tuple[Any, bool]:
-    """Get first row by lookup fields or create a new object."""
+    """Get first row by lookup fields or atomically create a new object.
+
+    This flow is intentionally insert-first to avoid TOCTOU races:
+    - build `obj = repo.model(**payload)`
+    - try `repo.insert(obj)` first
+    - on integrity conflict, query existing row and return `(row, False)`
+    """
 
     if not lookup:
         raise ValueError("lookup must not be empty.")
-
-    conditions = [C.eq(key, value) for key, value in lookup.items()]
-    found = repo.list(where=conditions, limit=1)
-    if found:
-        return found[0], False
+    if not _has_unique_lookup_constraint(repo, tuple(lookup.keys())):
+        raise ValueError(
+            "get_or_create() requires lookup fields backed by a UNIQUE or "
+            "PRIMARY KEY constraint."
+        )
 
     payload: dict[str, Any] = dict(lookup)
     if defaults:
         payload.update(defaults)
 
     obj = repo.model(**payload)
-    repo.insert(obj)
-    return obj, True
+    integrity_error: Exception | None = None
+    try:
+        repo.insert(obj)
+        return obj, True
+    except Exception as exc:
+        if not _is_integrity_error(repo, exc):
+            raise
+        integrity_error = exc
+
+    conditions = [C.eq(key, value) for key, value in lookup.items()]
+    found = repo.list(where=conditions, limit=1)
+    if found:
+        return found[0], False
+
+    assert integrity_error is not None
+    raise integrity_error
+
+
+def _has_unique_lookup_constraint(repo: Any, lookup_keys: tuple[str, ...]) -> bool:
+    key_set = set(lookup_keys)
+    if not key_set:
+        return False
+
+    if key_set == {repo.meta.pk}:
+        return True
+
+    fields_by_name = {f.name: f for f in model_fields(repo.model)}
+    if len(lookup_keys) == 1:
+        field = fields_by_name.get(lookup_keys[0])
+        if field and bool(field.metadata.get("unique_index")):
+            return True
+
+    raw_indexes = getattr(repo.model, "__indexes__", ())
+    for raw in raw_indexes:
+        if not isinstance(raw, Mapping):
+            continue
+        if not bool(raw.get("unique", False)):
+            continue
+        raw_columns = raw.get("columns")
+        if isinstance(raw_columns, str):
+            columns = (raw_columns,)
+        elif isinstance(raw_columns, SequenceABC):
+            columns = tuple(raw_columns)
+        else:
+            continue
+
+        if len(columns) == len(lookup_keys) and set(columns) == key_set:
+            return True
+
+    return False
+
+
+def _is_integrity_error(repo: Any, exc: Exception) -> bool:
+    """Detect integrity exceptions from DB driver with safe fallbacks."""
+
+    conn = getattr(repo.db, "conn", None)
+    driver_integrity = None
+    if conn is not None:
+        module_obj = __import__(conn.__class__.__module__)
+        driver_integrity = getattr(module_obj, "IntegrityError", None)
+
+    if driver_integrity and isinstance(exc, driver_integrity):
+        return True
+
+    return any(cls.__name__ == "IntegrityError" for cls in type(exc).mro())
