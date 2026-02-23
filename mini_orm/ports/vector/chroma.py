@@ -12,11 +12,14 @@ from ...core.vector_metrics import (
     VectorMetricInput,
     normalize_vector_metric,
 )
+from ...core.vector_policies import VectorIdPolicy
 from ...core.vector_types import VectorRecord, VectorSearchResult
 
 
 class ChromaVectorStore:
     """Vector store adapter for ChromaDB."""
+    supports_filters = True
+    id_policy = VectorIdPolicy.ANY
 
     def __init__(
         self,

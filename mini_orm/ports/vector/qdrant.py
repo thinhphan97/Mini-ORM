@@ -5,6 +5,7 @@ This adapter is optional and requires `qdrant-client` package installed.
 
 from __future__ import annotations
 
+from uuid import UUID
 from typing import Any, Mapping, Optional, Sequence
 
 from ...core.vector_metrics import (
@@ -12,11 +13,14 @@ from ...core.vector_metrics import (
     VectorMetricInput,
     normalize_vector_metric,
 )
+from ...core.vector_policies import VectorIdPolicy
 from ...core.vector_types import VectorRecord, VectorSearchResult
 
 
 class QdrantVectorStore:
     """Vector store adapter for Qdrant."""
+    supports_filters = True
+    id_policy = VectorIdPolicy.UUID
 
     def __init__(
         self,
@@ -85,7 +89,7 @@ class QdrantVectorStore:
         self._ensure_collection(collection)
         points = [
             self._models.PointStruct(
-                id=record.id,
+                id=self._normalize_uuid_id(record.id),
                 vector=[float(value) for value in record.vector],
                 payload=dict(record.payload or {}),
             )
@@ -134,7 +138,7 @@ class QdrantVectorStore:
 
         return [
             VectorSearchResult(
-                id=str(getattr(row, "id")),
+                id=self._normalize_uuid_id(str(row.id)),
                 score=float(getattr(row, "score", 0.0)),
                 payload=getattr(row, "payload", None),
             )
@@ -152,16 +156,19 @@ class QdrantVectorStore:
         if not ids:
             return []
 
+        normalized_ids = [self._normalize_uuid_id(item_id) for item_id in ids]
         rows = self._client.retrieve(
             collection_name=collection,
-            ids=list(ids),
+            ids=normalized_ids,
             with_vectors=True,
             with_payload=True,
         )
-        by_id = {str(getattr(row, "id")): row for row in rows}
+        by_id = {
+            self._normalize_uuid_id(str(getattr(row, "id"))): row for row in rows
+        }
         return [
             self._point_to_record(by_id[item_id])
-            for item_id in ids
+            for item_id in normalized_ids
             if item_id in by_id
         ]
 
@@ -169,7 +176,7 @@ class QdrantVectorStore:
         self._ensure_collection(collection)
         if not ids:
             return 0
-        unique_ids = list(dict.fromkeys(ids))
+        unique_ids = list(dict.fromkeys(self._normalize_uuid_id(item_id) for item_id in ids))
         existing_count = len(self.fetch(collection, unique_ids))
         if existing_count == 0:
             return 0
@@ -216,7 +223,7 @@ class QdrantVectorStore:
                 vector = next(iter(named_vectors.values()))
 
         return VectorRecord(
-            id=str(getattr(point, "id")),
+            id=self._normalize_uuid_id(str(getattr(point, "id"))),
             vector=list(vector or []),
             payload=getattr(point, "payload", None),
         )
@@ -241,6 +248,15 @@ class QdrantVectorStore:
             VectorMetric.L2: self._models.Distance.EUCLID,
         }
         return mapping[metric]
+
+    @staticmethod
+    def _normalize_uuid_id(value: str) -> str:
+        try:
+            return str(UUID(str(value)))
+        except Exception as exc:
+            raise ValueError(
+                f"QdrantVectorStore requires UUID string ids. Invalid id: {value!r}"
+            ) from exc
 
     def _ensure_collection(self, name: str) -> None:
         if not self._collection_exists(name):

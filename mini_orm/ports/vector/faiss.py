@@ -13,6 +13,7 @@ from ...core.vector_metrics import (
     VectorMetricInput,
     normalize_vector_metric,
 )
+from ...core.vector_policies import VectorIdPolicy
 from ...core.vector_types import VectorRecord, VectorSearchResult
 
 SUPPORTED_METRICS = {
@@ -35,6 +36,8 @@ class _CollectionState:
 
 class FaissVectorStore:
     """Vector store adapter for Facebook AI Similarity Search (Faiss)."""
+    supports_filters = False
+    id_policy = VectorIdPolicy.ANY
 
     def __init__(self) -> None:
         try:
@@ -125,7 +128,10 @@ class FaissVectorStore:
         top_k: int = 10,
         filters: Optional[Mapping[str, Any]] = None,
     ) -> list[VectorSearchResult]:
-        del filters  # Faiss index-level filter support is not standardized.
+        if filters:
+            raise NotImplementedError(
+                "FaissVectorStore does not support payload filters in query()."
+            )
 
         if top_k <= 0:
             return []

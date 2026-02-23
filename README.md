@@ -18,6 +18,12 @@ Lightweight Python ORM-style toolkit
   - `QdrantVectorStore` (optional, requires `qdrant-client`)
   - `ChromaVectorStore` (optional, requires `chromadb`)
   - `FaissVectorStore` (optional, requires `faiss-cpu` and `numpy`)
+  - ID policy:
+    - Qdrant requires UUID string IDs.
+    - InMemory/Chroma/Faiss accept generic string IDs.
+  - Filter policy (`query(..., filters={...})`):
+    - InMemory/Chroma/Qdrant support basic payload equality filters.
+    - Faiss does not support payload filters and raises `NotImplementedError`.
 
 ## Quick usage (SQL)
 
