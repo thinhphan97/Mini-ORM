@@ -304,8 +304,57 @@ def _column_sql(field: Any, dialect: DialectPort) -> str:
 
     if field.metadata.get("pk"):
         sql_parts.append("PRIMARY KEY")
+    if "fk" in field.metadata:
+        ref_table, ref_column = _parse_fk_reference(field.metadata["fk"])
+        sql_parts.append(f"REFERENCES {dialect.q(ref_table)} ({dialect.q(ref_column)})")
 
     return " ".join(sql_parts)
+
+
+def _parse_fk_reference(raw: Any) -> tuple[str, str]:
+    if isinstance(raw, str):
+        parts = raw.split(".", maxsplit=1)
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            raise ValueError(
+                "fk string must have format 'table.column', e.g. 'user.id'."
+            )
+        return parts[0], parts[1]
+
+    if isinstance(raw, Mapping):
+        table = _resolve_fk_table(raw.get("model"), raw.get("table"))
+        column = raw.get("column", "id")
+        if not isinstance(column, str) or not column:
+            raise TypeError("fk mapping 'column' must be a non-empty string.")
+        return table, column
+
+    if isinstance(raw, Sequence):
+        values = tuple(raw)
+        if len(values) != 2:
+            raise ValueError("fk sequence must have exactly 2 items: (table/model, column).")
+        table = _resolve_fk_table(values[0], None)
+        column = values[1]
+        if not isinstance(column, str) or not column:
+            raise TypeError("fk sequence column must be a non-empty string.")
+        return table, column
+
+    raise TypeError(
+        "Unsupported fk format. Use 'table.column', (ModelOrTable, 'column') "
+        "or {'model': Model, 'column': 'id'}."
+    )
+
+
+def _resolve_fk_table(model_or_table: Any, table_fallback: Any) -> str:
+    if isinstance(model_or_table, str) and model_or_table:
+        return model_or_table
+
+    if isinstance(model_or_table, type):
+        require_dataclass_model(model_or_table)
+        return table_name(model_or_table)
+
+    if isinstance(table_fallback, str) and table_fallback:
+        return table_fallback
+
+    raise TypeError("fk reference requires a table name string or dataclass model.")
 
 
 def _resolve_sql_type(annotation: Any) -> str:

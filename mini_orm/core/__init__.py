@@ -3,15 +3,17 @@
 from .conditions import C, Condition, ConditionGroup, NotCondition, OrderBy, WhereExpression
 from .models import (
     DataclassModel,
+    RelationSpec,
     auto_pk_field,
     model_fields,
+    model_relations,
     pk_fields,
     row_to_model,
     table_name,
     to_dict,
 )
 from .query_builder import WhereInput
-from .repository import Repository
+from .repository import RelatedResult, Repository
 from .schema import (
     IndexSpec,
     apply_schema,
@@ -34,7 +36,9 @@ __all__ = [
     "WhereExpression",
     "WhereInput",
     "DataclassModel",
+    "RelationSpec",
     "Repository",
+    "RelatedResult",
     "VectorMetric",
     "VectorMetricInput",
     "VectorIdPolicy",
@@ -49,6 +53,7 @@ __all__ = [
     "create_schema_sql",
     "create_table_sql",
     "model_fields",
+    "model_relations",
     "pk_fields",
     "row_to_model",
     "table_name",

@@ -81,6 +81,19 @@ class RichTypedColumnsModel:
     raw: Optional[bytes] = None
 
 
+@dataclass
+class ParentModel:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    title: str = ""
+
+
+@dataclass
+class ChildModel:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    parent_id: Optional[int] = field(default=None, metadata={"fk": (ParentModel, "id")})
+    name: str = ""
+
+
 class SchemaIndexTests(unittest.TestCase):
     def setUp(self) -> None:
         self.dialect = SQLiteDialect()
@@ -176,6 +189,10 @@ class SchemaIndexTests(unittest.TestCase):
         self.assertTrue(sql_list[0].startswith('CREATE TABLE IF NOT EXISTS "indexeduser"'))
         self.assertTrue(any("CREATE INDEX IF NOT EXISTS" in sql for sql in sql_list[1:]))
         self.assertTrue(any("CREATE UNIQUE INDEX IF NOT EXISTS" in sql for sql in sql_list[1:]))
+
+    def test_create_table_sql_supports_foreign_key_metadata(self) -> None:
+        sql = create_table_sql(ChildModel, self.dialect)
+        self.assertIn('"parent_id" INTEGER NULL REFERENCES "parentmodel" ("id")', sql)
 
     def test_apply_schema_creates_table_and_indexes(self) -> None:
         conn = sqlite3.connect(":memory:")

@@ -17,6 +17,38 @@ class UserRow:
 
 
 @dataclass
+class AuthorRow:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    name: str = ""
+
+
+@dataclass
+class PostRow:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    author_id: Optional[int] = field(default=None, metadata={"fk": (AuthorRow, "id")})
+    title: str = ""
+
+
+AuthorRow.__relations__ = {
+    "posts": {
+        "model": PostRow,
+        "local_key": "id",
+        "remote_key": "author_id",
+        "type": "has_many",
+    }
+}
+
+PostRow.__relations__ = {
+    "author": {
+        "model": AuthorRow,
+        "local_key": "author_id",
+        "remote_key": "id",
+        "type": "belongs_to",
+    }
+}
+
+
+@dataclass
 class OnlyPkRow:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
 
@@ -268,6 +300,63 @@ class RepositorySQLiteTests(unittest.TestCase):
         self.assertIsNotNone(obj)
         with self.assertRaises(ValueError):
             repo.update(obj)
+        conn.close()
+
+    def test_create_with_has_many_relations(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, AuthorRow)
+        apply_schema(db, PostRow)
+        author_repo = Repository[AuthorRow](db, AuthorRow)
+        post_repo = Repository[PostRow](db, PostRow)
+
+        author = AuthorRow(name="Alice")
+        posts = [PostRow(title="Post A"), PostRow(title="Post B")]
+        author_repo.create(author, relations={"posts": posts})
+
+        self.assertIsNotNone(author.id)
+        self.assertEqual(post_repo.count(), 2)
+        loaded_posts = post_repo.list(order_by=[OrderBy("id")])
+        self.assertTrue(all(post.author_id == author.id for post in loaded_posts))
+        conn.close()
+
+    def test_create_with_belongs_to_relation(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, AuthorRow)
+        apply_schema(db, PostRow)
+        author_repo = Repository[AuthorRow](db, AuthorRow)
+        post_repo = Repository[PostRow](db, PostRow)
+
+        post = PostRow(title="Nested")
+        post_repo.create(post, relations={"author": AuthorRow(name="Nested Author")})
+
+        self.assertIsNotNone(post.id)
+        self.assertIsNotNone(post.author_id)
+        self.assertEqual(author_repo.count(), 1)
+        conn.close()
+
+    def test_get_related_and_list_related(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, AuthorRow)
+        apply_schema(db, PostRow)
+        author_repo = Repository[AuthorRow](db, AuthorRow)
+        post_repo = Repository[PostRow](db, PostRow)
+
+        author = author_repo.create(
+            AuthorRow(name="Reader"),
+            relations={"posts": [PostRow(title="T1"), PostRow(title="T2")]},
+        )
+
+        author_with_posts = author_repo.get_related(author.id, include=["posts"])
+        self.assertIsNotNone(author_with_posts)
+        self.assertEqual(len(author_with_posts.relations["posts"]), 2)
+
+        posts_with_author = post_repo.list_related(include=["author"], order_by=[OrderBy("id")])
+        self.assertEqual(len(posts_with_author), 2)
+        self.assertTrue(all(item.relations["author"] is not None for item in posts_with_author))
+        self.assertTrue(all(item.relations["author"].name == "Reader" for item in posts_with_author))
         conn.close()
 
 

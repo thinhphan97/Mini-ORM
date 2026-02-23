@@ -6,8 +6,10 @@ from typing import Optional
 
 from mini_orm.core.metadata import build_model_metadata
 from mini_orm.core.models import (
+    RelationSpec,
     auto_pk_field,
     model_fields,
+    model_relations,
     pk_fields,
     require_dataclass_model,
     row_to_model,
@@ -38,6 +40,28 @@ class NoPkModel:
 class MultiPkModel:
     id1: int = field(default=0, metadata={"pk": True})
     id2: int = field(default=0, metadata={"pk": True})
+
+
+@dataclass
+class CompanyModel:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    name: str = ""
+
+
+@dataclass
+class EmployeeModel:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    company_id: Optional[int] = None
+    email: str = ""
+
+    __relations__ = {
+        "company": {
+            "model": CompanyModel,
+            "local_key": "company_id",
+            "remote_key": "id",
+            "type": "belongs_to",
+        }
+    }
 
 
 class PlainObject:
@@ -89,6 +113,37 @@ class ModelsAndMetadataTests(unittest.TestCase):
         self.assertEqual(metadata.auto_pk, "id")
         self.assertEqual(metadata.columns, ["id", "email", "age"])
         self.assertEqual(metadata.writable_columns, ["email", "age"])
+        self.assertEqual(metadata.relations, {})
+
+    def test_model_relations_are_parsed_and_exposed_in_metadata(self) -> None:
+        relations = model_relations(EmployeeModel)
+        self.assertIn("company", relations)
+        company_relation = relations["company"]
+        self.assertIsInstance(company_relation, RelationSpec)
+        self.assertFalse(company_relation.many)
+        self.assertEqual(company_relation.local_key, "company_id")
+        self.assertEqual(company_relation.remote_key, "id")
+        self.assertIs(company_relation.model, CompanyModel)
+
+        metadata = build_model_metadata(EmployeeModel)
+        self.assertIn("company", metadata.relations)
+
+    def test_model_relations_validate_invalid_keys(self) -> None:
+        @dataclass
+        class BrokenRelationModel:
+            id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+            company_id: Optional[int] = None
+
+            __relations__ = {
+                "company": {
+                    "model": CompanyModel,
+                    "local_key": "missing_column",
+                    "remote_key": "id",
+                }
+            }
+
+        with self.assertRaises(ValueError):
+            model_relations(BrokenRelationModel)
 
     def test_build_model_metadata_requires_single_pk(self) -> None:
         with self.assertRaises(ValueError):

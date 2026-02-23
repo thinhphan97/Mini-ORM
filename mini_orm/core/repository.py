@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence as SequenceABC
+from dataclasses import dataclass
 from typing import Any, Generic, List, Mapping, Optional, Sequence, Type, TypeVar
 
 from .conditions import C, OrderBy
 from .contracts import DatabasePort
 from .metadata import build_model_metadata
-from .models import DataclassModel, require_dataclass_model, row_to_model, to_dict
+from .models import DataclassModel, RelationSpec, require_dataclass_model, row_to_model, to_dict
 from .query_builder import (
     WhereInput,
     append_limit_offset,
@@ -16,6 +18,14 @@ from .query_builder import (
 )
 
 T = TypeVar("T", bound=DataclassModel)
+
+
+@dataclass(frozen=True)
+class RelatedResult(Generic[T]):
+    """One record and its requested related records."""
+
+    obj: T
+    relations: dict[str, Any]
 
 
 class Repository(Generic[T]):
@@ -264,6 +274,99 @@ class Repository(Generic[T]):
             inserted.append(self.insert(obj))
         return inserted
 
+    def create(self, obj: T, *, relations: Mapping[str, Any] | None = None) -> T:
+        """Create one object and optionally create/link related records.
+
+        Relation declarations come from model `__relations__`:
+        - `many=False` (`belongs_to`): related object is inserted first, then
+          `obj.<local_key>` is populated from `related.<remote_key>`.
+        - `many=True` (`has_many`): parent is inserted first, then each child
+          gets `child.<remote_key> = obj.<local_key>` before insertion.
+        """
+
+        if not relations:
+            return self.insert(obj)
+
+        relation_items = list(relations.items())
+        with self.db.transaction():
+            for relation_name, relation_value in relation_items:
+                spec = self._relation_spec(relation_name)
+                if spec.many:
+                    continue
+                if relation_value is None:
+                    continue
+                if not isinstance(relation_value, spec.model):
+                    raise TypeError(
+                        f"Relation {relation_name!r} expects {spec.model.__name__}."
+                    )
+                related_repo = Repository(self.db, spec.model)
+                related_repo.insert(relation_value)
+                setattr(obj, spec.local_key, getattr(relation_value, spec.remote_key))
+
+            self.insert(obj)
+
+            for relation_name, relation_value in relation_items:
+                spec = self._relation_spec(relation_name)
+                if not spec.many:
+                    continue
+                if relation_value is None:
+                    continue
+                if isinstance(relation_value, (str, bytes)) or not isinstance(
+                    relation_value, SequenceABC
+                ):
+                    raise TypeError(
+                        f"Relation {relation_name!r} expects a sequence of "
+                        f"{spec.model.__name__} objects."
+                    )
+                related_repo = Repository(self.db, spec.model)
+                for child in relation_value:
+                    if not isinstance(child, spec.model):
+                        raise TypeError(
+                            f"Relation {relation_name!r} expects {spec.model.__name__}."
+                        )
+                    setattr(child, spec.remote_key, getattr(obj, spec.local_key))
+                related_repo.insert_many(relation_value)
+
+        return obj
+
+    def get_related(
+        self,
+        pk_value: Any,
+        *,
+        include: Sequence[str],
+    ) -> Optional[RelatedResult[T]]:
+        """Get one record and requested relations in one result object."""
+
+        obj = self.get(pk_value)
+        if obj is None:
+            return None
+
+        loaded = self._load_relations_for_objects([obj], include=include)
+        return RelatedResult(obj=obj, relations=loaded[0])
+
+    def list_related(
+        self,
+        *,
+        include: Sequence[str],
+        where: WhereInput = None,
+        order_by: Optional[Sequence[OrderBy]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> list[RelatedResult[T]]:
+        """List records with requested related records."""
+
+        rows = self.list(
+            where=where,
+            order_by=order_by,
+            limit=limit,
+            offset=offset,
+        )
+        loaded = self._load_relations_for_objects(rows, include=include)
+        return [
+            RelatedResult(obj=row, relations=relations)
+            for row, relations in zip(rows, loaded)
+        ]
+
     def update_where(
         self,
         values: Mapping[str, Any],
@@ -351,3 +454,82 @@ class Repository(Generic[T]):
         obj = self.model(**payload)
         self.insert(obj)
         return obj, True
+
+    def _relation_spec(self, relation_name: str) -> RelationSpec:
+        spec = self.meta.relations.get(relation_name)
+        if spec is None:
+            available = ", ".join(sorted(self.meta.relations)) or "<none>"
+            raise ValueError(
+                f"Unknown relation {relation_name!r} on {self.model.__name__}. "
+                f"Available: {available}"
+            )
+        return spec
+
+    def _load_relations_for_objects(
+        self,
+        objects: Sequence[T],
+        *,
+        include: Sequence[str],
+    ) -> list[dict[str, Any]]:
+        if not objects:
+            return []
+
+        include_names = self._normalize_include(include)
+        results: list[dict[str, Any]] = [dict() for _ in objects]
+
+        for relation_name in include_names:
+            spec = self._relation_spec(relation_name)
+            related_repo = Repository(self.db, spec.model)
+
+            if spec.many:
+                owner_keys = self._dedupe_non_null(
+                    [getattr(obj, spec.local_key) for obj in objects]
+                )
+                grouped: dict[Any, list[DataclassModel]] = {}
+                if owner_keys:
+                    related_rows = related_repo.list(
+                        where=C.in_(spec.remote_key, owner_keys),
+                        order_by=[OrderBy(spec.remote_key), OrderBy(related_repo.meta.pk)],
+                    )
+                    for row in related_rows:
+                        grouped.setdefault(getattr(row, spec.remote_key), []).append(row)
+
+                for index, obj in enumerate(objects):
+                    key = getattr(obj, spec.local_key)
+                    results[index][relation_name] = grouped.get(key, [])
+                continue
+
+            fk_values = self._dedupe_non_null([getattr(obj, spec.local_key) for obj in objects])
+            mapped: dict[Any, DataclassModel] = {}
+            if fk_values:
+                related_rows = related_repo.list(where=C.in_(spec.remote_key, fk_values))
+                for row in related_rows:
+                    mapped[getattr(row, spec.remote_key)] = row
+
+            for index, obj in enumerate(objects):
+                key = getattr(obj, spec.local_key)
+                results[index][relation_name] = mapped.get(key)
+
+        return results
+
+    def _normalize_include(self, include: Sequence[str]) -> list[str]:
+        normalized: list[str] = []
+        for name in include:
+            if not isinstance(name, str) or not name:
+                raise TypeError("include relation names must be non-empty strings.")
+            if name in normalized:
+                continue
+            normalized.append(name)
+        return normalized
+
+    def _dedupe_non_null(self, values: Sequence[Any]) -> list[Any]:
+        deduped: list[Any] = []
+        seen: set[Any] = set()
+        for value in values:
+            if value is None:
+                continue
+            if value in seen:
+                continue
+            seen.add(value)
+            deduped.append(value)
+        return deduped

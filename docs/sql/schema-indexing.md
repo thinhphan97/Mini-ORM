@@ -22,6 +22,7 @@ Supported metadata keys:
 - `index=True`: normal index
 - `unique_index=True`: unique index
 - `index_name="..."`: custom single-column index name
+- `fk=...`: foreign key reference (`"table.column"`, `(ModelOrTable, "column")`, or `{"model": Model, "column": "id"}`)
 
 ## Multi-column index
 
