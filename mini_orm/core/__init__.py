@@ -21,6 +21,7 @@ from .schema import (
     create_table_sql,
 )
 from .vector_metrics import VectorMetric, VectorMetricInput, normalize_vector_metric
+from .vector_policies import VectorIdPolicy
 from .vector_repository import VectorRepository
 from .vector_types import VectorRecord, VectorSearchResult
 
@@ -33,6 +34,7 @@ __all__ = [
     "Repository",
     "VectorMetric",
     "VectorMetricInput",
+    "VectorIdPolicy",
     "VectorRecord",
     "VectorSearchResult",
     "VectorRepository",

@@ -11,6 +11,7 @@ from ...core.vector_metrics import (
     VectorMetricInput,
     normalize_vector_metric,
 )
+from ...core.vector_policies import VectorIdPolicy
 from ...core.vector_types import VectorRecord, VectorSearchResult
 
 SUPPORTED_METRICS = {
@@ -29,6 +30,8 @@ class _CollectionState:
 
 class InMemoryVectorStore:
     """Simple in-memory implementation of vector database operations."""
+    supports_filters = True
+    id_policy = VectorIdPolicy.ANY
 
     def __init__(self) -> None:
         self._collections: dict[str, _CollectionState] = {}
