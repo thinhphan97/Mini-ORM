@@ -49,6 +49,24 @@ class Repository(Generic[T]):
             columns = [name for name in columns if name != self.meta.auto_pk]
 
         table_sql = self.d.q(self.meta.table)
+
+        if not columns:
+            sql = f"INSERT INTO {table_sql} DEFAULT VALUES"
+            if self.meta.auto_pk and self.d.supports_returning:
+                sql += self.d.returning_clause(self.meta.auto_pk) + ";"
+                row = self.db.fetchone(sql)
+                if row and self.meta.auto_pk in row:
+                    setattr(obj, self.meta.auto_pk, row[self.meta.auto_pk])
+                return obj
+
+            sql += ";"
+            cursor = self.db.execute(sql)
+            if self.meta.auto_pk and getattr(obj, self.meta.auto_pk) is None:
+                new_id = self.d.get_lastrowid(cursor)
+                if new_id is not None:
+                    setattr(obj, self.meta.auto_pk, new_id)
+            return obj
+
         column_sql = ", ".join(self.d.q(name) for name in columns)
 
         if self.d.paramstyle == "named":
@@ -101,6 +119,10 @@ class Repository(Generic[T]):
         pk_value = data.get(self.meta.pk)
         if pk_value is None:
             raise ValueError("Cannot UPDATE without PK set on object.")
+        if not self.meta.writable_columns:
+            raise ValueError(
+                "Cannot UPDATE model with no writable columns besides primary key."
+            )
 
         table_sql = self.d.q(self.meta.table)
 

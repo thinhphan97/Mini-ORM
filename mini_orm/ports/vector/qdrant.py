@@ -169,13 +169,17 @@ class QdrantVectorStore:
         self._ensure_collection(collection)
         if not ids:
             return 0
+        unique_ids = list(dict.fromkeys(ids))
+        existing_count = len(self.fetch(collection, unique_ids))
+        if existing_count == 0:
+            return 0
 
         self._client.delete(
             collection_name=collection,
-            points_selector=self._models.PointIdsList(points=list(ids)),
+            points_selector=self._models.PointIdsList(points=unique_ids),
             wait=True,
         )
-        return len(ids)
+        return existing_count
 
     def _scroll_all_points(self, collection: str) -> list[Any]:
         points: list[Any] = []
