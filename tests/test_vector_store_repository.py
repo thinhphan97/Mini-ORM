@@ -191,6 +191,17 @@ class VectorRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(recreated.fetch(), [])
 
+    def test_query_filters_raise_when_backend_unsupported(self) -> None:
+        class NoFilterInMemoryStore(InMemoryVectorStore):
+            supports_filters = False
+
+        store = NoFilterInMemoryStore()
+        repo = VectorRepository(store, "no_filters", dimension=2, auto_create=True)
+        repo.upsert([VectorRecord("r1", [1, 0], {"group": "a"})])
+
+        with self.assertRaises(NotImplementedError):
+            repo.query([1, 0], top_k=1, filters={"group": "a"})
+
 
 @unittest.skipUnless(HAS_QDRANT, "qdrant_client is not installed")
 class QdrantLocalVectorFlowTests(unittest.TestCase):
@@ -298,6 +309,41 @@ class QdrantLocalVectorFlowTests(unittest.TestCase):
             self.assertEqual(hits[0].id, expected_first)
             self.assertEqual(len(hits), 3)
 
+    def test_qdrant_delete_counts_only_existing_records(self) -> None:
+        store = QdrantVectorStore(location=":memory:")
+        repo = VectorRepository(
+            store,
+            "qdrant_delete_count",
+            dimension=2,
+            metric=VectorMetric.COSINE,
+            auto_create=True,
+            overwrite=True,
+        )
+        existing = "11111111-1111-1111-1111-111111111111"
+        missing = "22222222-2222-2222-2222-222222222222"
+        repo.upsert([VectorRecord(existing, [1, 0], {"kind": "x"})])
+
+        deleted = repo.delete([existing, missing])
+        self.assertEqual(deleted, 1)
+
+    def test_qdrant_requires_uuid_ids(self) -> None:
+        store = QdrantVectorStore(location=":memory:")
+        repo = VectorRepository(
+            store,
+            "qdrant_uuid_policy",
+            dimension=2,
+            metric=VectorMetric.COSINE,
+            auto_create=True,
+            overwrite=True,
+        )
+
+        with self.assertRaisesRegex(ValueError, "requires UUID"):
+            repo.upsert([VectorRecord("not-a-uuid", [1, 0], {"kind": "x"})])
+        with self.assertRaisesRegex(ValueError, "requires UUID"):
+            repo.fetch(ids=["not-a-uuid"])
+        with self.assertRaisesRegex(ValueError, "requires UUID"):
+            repo.delete(["not-a-uuid"])
+
 
 @unittest.skipUnless(HAS_CHROMA, "chromadb is not installed")
 class ChromaLocalVectorFlowTests(unittest.TestCase):
@@ -371,6 +417,37 @@ class ChromaLocalVectorFlowTests(unittest.TestCase):
             self.assertEqual(hits[0].id, expected_first)
             self.assertEqual(len(hits), 3)
 
+    def test_chroma_upsert_allows_none_payload(self) -> None:
+        store = ChromaVectorStore(path=":memory:")
+        repo = VectorRepository(
+            store,
+            "chroma_none_payload",
+            dimension=2,
+            metric=VectorMetric.COSINE,
+            auto_create=True,
+            overwrite=True,
+        )
+        repo.upsert([VectorRecord("u1", [1, 0], None)])
+
+        fetched = repo.fetch(ids=["u1"])
+        self.assertEqual(len(fetched), 1)
+        self.assertIsNone(fetched[0].payload)
+
+    def test_chroma_delete_counts_only_existing_records(self) -> None:
+        store = ChromaVectorStore(path=":memory:")
+        repo = VectorRepository(
+            store,
+            "chroma_delete_count",
+            dimension=2,
+            metric=VectorMetric.COSINE,
+            auto_create=True,
+            overwrite=True,
+        )
+        repo.upsert([VectorRecord("u1", [1, 0], {"kind": "x"})])
+
+        deleted = repo.delete(["u1", "missing"])
+        self.assertEqual(deleted, 1)
+
 
 @unittest.skipUnless(HAS_FAISS, "faiss/numpy is not installed")
 class FaissLocalVectorFlowTests(unittest.TestCase):
@@ -440,6 +517,21 @@ class FaissLocalVectorFlowTests(unittest.TestCase):
             repo.upsert(records)
             hits = repo.query(query_vector, top_k=3)
             self.assertEqual([hit.id for hit in hits], expected_order)
+
+    def test_faiss_query_filters_raise_not_supported(self) -> None:
+        store = FaissVectorStore()
+        repo = VectorRepository(
+            store,
+            "faiss_filter_unsupported",
+            dimension=2,
+            metric=VectorMetric.COSINE,
+            auto_create=True,
+            overwrite=True,
+        )
+        repo.upsert([VectorRecord("u1", [1, 0], {"group": "a"})])
+
+        with self.assertRaisesRegex(NotImplementedError, "does not support payload filters"):
+            repo.query([1, 0], top_k=1, filters={"group": "a"})
 
 
 class QdrantAdapterOptionalTests(unittest.TestCase):

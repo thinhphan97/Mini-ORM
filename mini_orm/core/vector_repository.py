@@ -6,6 +6,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from .contracts import VectorStorePort
 from .vector_metrics import VectorMetric, VectorMetricInput, normalize_vector_metric
+from .vector_policies import VectorIdPolicy
 from .vector_types import VectorRecord, VectorSearchResult
 
 
@@ -37,6 +38,8 @@ class VectorRepository:
         self.collection = collection
         self.dimension = dimension
         self.metric = normalize_vector_metric(metric)
+        self.id_policy = getattr(store, "id_policy", VectorIdPolicy.ANY)
+        self.supports_filters = bool(getattr(store, "supports_filters", True))
 
         if auto_create:
             self.store.create_collection(
@@ -69,6 +72,10 @@ class VectorRepository:
         filters: Optional[Mapping[str, Any]] = None,
     ) -> list[VectorSearchResult]:
         """Search nearest vectors in the collection."""
+        if filters and not self.supports_filters:
+            raise NotImplementedError(
+                f"{type(self.store).__name__} does not support payload filters in query()."
+            )
 
         return self.store.query(
             self.collection,

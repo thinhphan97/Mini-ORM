@@ -12,11 +12,14 @@ from ...core.vector_metrics import (
     VectorMetricInput,
     normalize_vector_metric,
 )
+from ...core.vector_policies import VectorIdPolicy
 from ...core.vector_types import VectorRecord, VectorSearchResult
 
 
 class ChromaVectorStore:
     """Vector store adapter for ChromaDB."""
+    supports_filters = True
+    id_policy = VectorIdPolicy.ANY
 
     def __init__(
         self,
@@ -101,12 +104,36 @@ class ChromaVectorStore:
                     f"Vector dimension mismatch: expected {dimension}, "
                     f"got {len(record.vector)}"
                 )
+        with_metadata: list[VectorRecord] = []
+        without_metadata: list[VectorRecord] = []
 
-        col.upsert(
-            ids=[str(record.id) for record in records],
-            embeddings=[[float(value) for value in record.vector] for record in records],
-            metadatas=[dict(record.payload or {}) for record in records],
-        )
+        for record in records:
+            payload = dict(record.payload) if record.payload is not None else None
+            if payload:
+                with_metadata.append(
+                    VectorRecord(record.id, record.vector, payload)
+                )
+            else:
+                without_metadata.append(record)
+
+        if with_metadata:
+            col.upsert(
+                ids=[str(record.id) for record in with_metadata],
+                embeddings=[
+                    [float(value) for value in record.vector]
+                    for record in with_metadata
+                ],
+                metadatas=[dict(record.payload or {}) for record in with_metadata],
+            )
+
+        if without_metadata:
+            col.upsert(
+                ids=[str(record.id) for record in without_metadata],
+                embeddings=[
+                    [float(value) for value in record.vector]
+                    for record in without_metadata
+                ],
+            )
 
     def query(
         self,
@@ -173,11 +200,17 @@ class ChromaVectorStore:
         return [by_id[item_id] for item_id in ids if item_id in by_id]
 
     def delete(self, collection: str, ids: Sequence[str]) -> int:
-        col = self._get_collection(collection)
+
         if not ids:
             return 0
-        col.delete(ids=list(ids))
-        return len(ids)
+        unique_ids = list(dict.fromkeys(ids))
+        existing_ids = [record.id for record in self.fetch(collection, unique_ids)]
+        if not existing_ids:
+            return 0
+
+        col = self._get_collection(collection)
+        col.delete(ids=existing_ids)
+        return len(existing_ids)
 
     def _get_collection(self, name: str) -> Any:
         if name in self._collections:

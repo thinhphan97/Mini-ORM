@@ -7,6 +7,7 @@ from typing import Any, List, Mapping, Optional, Protocol, Sequence
 
 from .types import MaybeRow, QueryParams, RowMapping
 from .vector_metrics import VectorMetric, VectorMetricInput
+from .vector_policies import VectorIdPolicy
 from .vector_types import VectorRecord, VectorSearchResult
 
 
@@ -41,6 +42,9 @@ class DatabasePort(Protocol):
 
 class VectorStorePort(Protocol):
     """Vector database behavior required by `VectorRepository`."""
+
+    supports_filters: bool
+    id_policy: VectorIdPolicy
 
     def create_collection(
         self,
