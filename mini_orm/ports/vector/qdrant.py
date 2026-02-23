@@ -138,7 +138,7 @@ class QdrantVectorStore:
 
         return [
             VectorSearchResult(
-                id=self._normalize_uuid_id(str(getattr(row, "id"))),
+                id=self._normalize_uuid_id(str(row.id)),
                 score=float(getattr(row, "score", 0.0)),
                 payload=getattr(row, "payload", None),
             )
