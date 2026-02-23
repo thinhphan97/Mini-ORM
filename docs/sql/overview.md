@@ -7,6 +7,13 @@
 3. Apply schema (`apply_schema`).
 4. Use `Repository[T]` for CRUD and filtering.
 
+Common repository helpers:
+
+- `count(where=...)`, `exists(where=...)`
+- `insert_many(...)`
+- `update_where(values, where=...)`, `delete_where(where=...)`
+- `get_or_create(lookup=..., defaults=...)`
+
 ## Layer boundaries
 
 - `mini_orm.core`

@@ -1,6 +1,6 @@
 """Public core API for query building, schema, and repository operations."""
 
-from .conditions import C, Condition, OrderBy
+from .conditions import C, Condition, ConditionGroup, NotCondition, OrderBy, WhereExpression
 from .models import (
     DataclassModel,
     auto_pk_field,
@@ -28,7 +28,10 @@ from .vector_types import VectorRecord, VectorSearchResult
 __all__ = [
     "C",
     "Condition",
+    "ConditionGroup",
+    "NotCondition",
     "OrderBy",
+    "WhereExpression",
     "WhereInput",
     "DataclassModel",
     "Repository",

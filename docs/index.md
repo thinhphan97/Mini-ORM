@@ -6,12 +6,14 @@ Lightweight Python ORM-style toolkit.
 
 - Dataclass-based SQL models.
 - Single-table CRUD via `Repository[T]`.
-- Safe query building (`where`, `order by`, `limit`, `offset`).
+- Safe query building (`where`, `AND/OR/NOT`, `order by`, `limit`, `offset`).
+- Repository utility APIs: `count`, `exists`, `insert_many`, `update_where`, `delete_where`, `get_or_create`.
 - Schema generation from model metadata.
 - Index support:
   - Field metadata (`index`, `unique_index`, `index_name`)
   - Multi-column indexes via `__indexes__`
   - One-call schema apply with `apply_schema(...)`
+  - Idempotent mode with `if_not_exists=True`
 - SQL dialect adapters: SQLite, Postgres, MySQL.
 - Vector abstraction via `VectorRepository`:
   - `InMemoryVectorStore` (built-in)
@@ -40,6 +42,15 @@ repo = Repository[User](db, User)
 apply_schema(db, User)
 repo.insert(User(email="alice@example.com"))
 rows = repo.list(where=C.eq("email", "alice@example.com"))
+
+rows = repo.list(
+    where=C.or_(
+        C.eq("email", "alice@example.com"),
+        C.eq("email", "bob@example.com"),
+    ),
+    limit=10,
+)
+total = repo.count(where=C.like("email", "%@example.com"))
 ```
 
 ## Quick usage (Vector)

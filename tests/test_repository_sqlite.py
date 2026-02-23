@@ -148,6 +148,99 @@ class RepositorySQLiteTests(unittest.TestCase):
         self.assertEqual(len(null_age), 1)
         self.assertEqual(null_age[0].email, "david@example.com")
 
+    def test_list_with_grouped_conditions(self) -> None:
+        self._seed_users()
+        rows = self.repo.list(
+            where=C.or_(
+                C.eq("email", "alice@example.com"),
+                C.eq("email", "bob@example.com"),
+            ),
+            order_by=[OrderBy("id")],
+        )
+        self.assertEqual([row.email for row in rows], ["alice@example.com", "bob@example.com"])
+
+    def test_list_rejects_invalid_limit_offset(self) -> None:
+        with self.assertRaises(ValueError):
+            self.repo.list(limit=0)
+        with self.assertRaises(ValueError):
+            self.repo.list(offset=-1)
+
+    def test_count_and_exists(self) -> None:
+        self._seed_users()
+        self.assertEqual(self.repo.count(), 4)
+        self.assertEqual(self.repo.count(where=C.like("email", "%@example.com")), 3)
+        self.assertTrue(self.repo.exists(where=C.eq("email", "alice@example.com")))
+        self.assertFalse(self.repo.exists(where=C.eq("email", "nobody@example.com")))
+
+    def test_insert_many(self) -> None:
+        inserted = self.repo.insert_many(
+            [
+                UserRow(email="m1@example.com", age=10),
+                UserRow(email="m2@example.com", age=20),
+            ]
+        )
+        self.assertEqual(len(inserted), 2)
+        self.assertEqual(self.repo.count(), 2)
+        self.assertTrue(all(item.id is not None for item in inserted))
+
+    def test_update_where(self) -> None:
+        self._seed_users()
+        updated = self.repo.update_where(
+            {"age": 40},
+            where=C.or_(
+                C.eq("email", "alice@example.com"),
+                C.eq("email", "bob@example.com"),
+            ),
+        )
+        rows = self.repo.list(
+            where=C.in_("email", ["alice@example.com", "bob@example.com"]),
+            order_by=[OrderBy("id")],
+        )
+        self.assertEqual(updated, 2)
+        self.assertEqual([row.age for row in rows], [40, 40])
+
+    def test_update_where_validations(self) -> None:
+        self._seed_users()
+        with self.assertRaises(ValueError):
+            self.repo.update_where({}, where=C.eq("id", 1))
+        with self.assertRaises(ValueError):
+            self.repo.update_where({"age": 20}, where=None)
+        with self.assertRaises(ValueError):
+            self.repo.update_where({"unknown": 1}, where=C.eq("id", 1))
+        with self.assertRaises(ValueError):
+            self.repo.update_where({"id": 123}, where=C.eq("id", 1))
+
+    def test_delete_where(self) -> None:
+        self._seed_users()
+        deleted = self.repo.delete_where(
+            where=C.like("email", "%@example.com"),
+        )
+        self.assertEqual(deleted, 3)
+        self.assertEqual(self.repo.count(), 1)
+
+    def test_delete_where_requires_where(self) -> None:
+        with self.assertRaises(ValueError):
+            self.repo.delete_where(where=None)
+
+    def test_get_or_create(self) -> None:
+        first, created_first = self.repo.get_or_create(
+            lookup={"email": "new@example.com"},
+            defaults={"age": 33},
+        )
+        second, created_second = self.repo.get_or_create(
+            lookup={"email": "new@example.com"},
+            defaults={"age": 99},
+        )
+        self.assertTrue(created_first)
+        self.assertFalse(created_second)
+        self.assertEqual(first.email, "new@example.com")
+        self.assertEqual(first.age, 33)
+        self.assertEqual(second.id, first.id)
+
+    def test_get_or_create_requires_lookup(self) -> None:
+        with self.assertRaises(ValueError):
+            self.repo.get_or_create(lookup={})
+
     def test_repository_requires_dataclass_and_single_pk(self) -> None:
         with self.assertRaises(TypeError):
             Repository(self.db, PlainModel)

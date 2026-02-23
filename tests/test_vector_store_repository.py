@@ -10,6 +10,7 @@ from mini_orm import (
     FaissVectorStore,
     InMemoryVectorStore,
     QdrantVectorStore,
+    VectorIdPolicy,
     VectorMetric,
     VectorRecord,
     VectorRepository,
@@ -201,6 +202,28 @@ class VectorRepositoryTests(unittest.TestCase):
 
         with self.assertRaises(NotImplementedError):
             repo.query([1, 0], top_k=1, filters={"group": "a"})
+
+    def test_vector_repository_validates_dimension(self) -> None:
+        store = InMemoryVectorStore()
+        repo = VectorRepository(store, "dim", dimension=2, auto_create=True)
+        with self.assertRaises(ValueError):
+            repo.upsert([VectorRecord("x", [1, 0, 0])])
+        with self.assertRaises(ValueError):
+            repo.query([1, 0, 0], top_k=1)
+
+    def test_vector_repository_validates_uuid_policy(self) -> None:
+        class UUIDOnlyInMemoryStore(InMemoryVectorStore):
+            id_policy = VectorIdPolicy.UUID
+
+        store = UUIDOnlyInMemoryStore()
+        repo = VectorRepository(store, "uuid_policy", dimension=2, auto_create=True)
+
+        with self.assertRaisesRegex(ValueError, "requires UUID"):
+            repo.upsert([VectorRecord("not-a-uuid", [1, 0])])
+        with self.assertRaisesRegex(ValueError, "requires UUID"):
+            repo.fetch(ids=["not-a-uuid"])
+        with self.assertRaisesRegex(ValueError, "requires UUID"):
+            repo.delete(["not-a-uuid"])
 
 
 @unittest.skipUnless(HAS_QDRANT, "qdrant_client is not installed")

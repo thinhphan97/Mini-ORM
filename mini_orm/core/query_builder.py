@@ -10,12 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List, Optional, Sequence, Tuple
 
-from .conditions import Condition, OrderBy
+from .conditions import Condition, ConditionGroup, NotCondition, OrderBy, WhereExpression
 from .contracts import DialectPort
 from .types import NamedParams, PositionalParams, QueryParams
 
 
-WhereInput = Optional[Sequence[Condition] | Condition]
+WhereInput = Optional[Sequence[WhereExpression] | WhereExpression]
 
 
 @dataclass(frozen=True)
@@ -56,19 +56,21 @@ def compile_where(where: WhereInput, dialect: DialectPort) -> CompiledFragment:
     if where is None:
         return CompiledFragment("", None)
 
-    conditions = [where] if isinstance(where, Condition) else list(where)
-    if not conditions:
+    generator = _ParamNameGenerator()
+    if isinstance(where, (Condition, ConditionGroup, NotCondition)):
+        clause, params = _compile_expression(where, dialect, generator)
+        return CompiledFragment(f" WHERE {clause}", params)
+
+    expressions = list(where)
+    if not expressions:
         return CompiledFragment("", None)
 
-    generator = _ParamNameGenerator()
     clauses: List[str] = []
     params: QueryParams = {} if dialect.paramstyle == "named" else []
-
-    for item in conditions:
-        clause, fragment_params = _compile_condition(item, dialect, generator)
+    for item in expressions:
+        clause, fragment_params = _compile_expression(item, dialect, generator)
         clauses.append(clause)
         _merge_params(params, fragment_params)
-
     return CompiledFragment(f" WHERE {' AND '.join(clauses)}", params)
 
 
@@ -115,6 +117,11 @@ def append_limit_offset(
         Updated SQL and merged parameters.
     """
 
+    if limit is not None and limit <= 0:
+        raise ValueError("limit must be > 0 when provided.")
+    if offset is not None and offset < 0:
+        raise ValueError("offset must be >= 0 when provided.")
+
     if dialect.paramstyle == "named":
         named_params: NamedParams = {}
         if isinstance(params, dict):
@@ -137,6 +144,52 @@ def append_limit_offset(
         sql += f" OFFSET {dialect.placeholder('offset')}"
         positional_params.append(offset)
     return sql, positional_params if positional_params else None
+
+
+def _compile_expression(
+    expression: WhereExpression,
+    dialect: DialectPort,
+    generator: _ParamNameGenerator,
+) -> Tuple[str, QueryParams]:
+    if isinstance(expression, Condition):
+        return _compile_condition(expression, dialect, generator)
+
+    if isinstance(expression, ConditionGroup):
+        return _compile_group(expression, dialect, generator)
+
+    if isinstance(expression, NotCondition):
+        clause, params = _compile_expression(expression.item, dialect, generator)
+        return f"NOT ({clause})", params
+
+    raise TypeError(
+        "Unsupported where expression type: "
+        f"{type(expression).__name__}. "
+        "Use Condition/ConditionGroup/NotCondition."
+    )
+
+
+def _compile_group(
+    group: ConditionGroup,
+    dialect: DialectPort,
+    generator: _ParamNameGenerator,
+) -> Tuple[str, QueryParams]:
+    if not group.items:
+        raise ValueError("Grouped condition must contain at least one expression.")
+    if group.operator not in {"AND", "OR"}:
+        raise ValueError(
+            f"Unsupported grouped condition operator: {group.operator!r}. "
+            "Supported: 'AND', 'OR'."
+        )
+
+    params: QueryParams = _empty_params(dialect)
+    parts: list[str] = []
+    for item in group.items:
+        clause, fragment_params = _compile_expression(item, dialect, generator)
+        parts.append(f"({clause})")
+        _merge_params(params, fragment_params)
+
+    joined = f" {group.operator} ".join(parts)
+    return f"({joined})", params
 
 
 def _compile_condition(

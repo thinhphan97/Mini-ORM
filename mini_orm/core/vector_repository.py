@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from uuid import UUID
 from typing import Any, Mapping, Optional, Sequence
 
 from .contracts import VectorStorePort
@@ -34,6 +35,9 @@ class VectorRepository:
             overwrite: Recreate collection if already exists (used with auto_create).
         """
 
+        if dimension <= 0:
+            raise ValueError("dimension must be > 0")
+
         self.store = store
         self.collection = collection
         self.dimension = dimension
@@ -62,7 +66,18 @@ class VectorRepository:
     def upsert(self, records: Sequence[VectorRecord]) -> None:
         """Insert or update vector records."""
 
-        self.store.upsert(self.collection, records)
+        normalized_records: list[VectorRecord] = []
+        for record in records:
+            self._validate_vector_dimension(record.vector)
+            record_id = self._normalize_id(record.id)
+            normalized_records.append(
+                VectorRecord(
+                    id=record_id,
+                    vector=record.vector,
+                    payload=record.payload,
+                )
+            )
+        self.store.upsert(self.collection, normalized_records)
 
     def query(
         self,
@@ -76,6 +91,7 @@ class VectorRepository:
             raise NotImplementedError(
                 f"{type(self.store).__name__} does not support payload filters in query()."
             )
+        self._validate_vector_dimension(vector)
 
         return self.store.query(
             self.collection,
@@ -87,9 +103,32 @@ class VectorRepository:
     def fetch(self, ids: Optional[Sequence[str]] = None) -> list[VectorRecord]:
         """Fetch records by ids, or fetch all when ids is None."""
 
-        return self.store.fetch(self.collection, ids)
+        normalized_ids = (
+            [self._normalize_id(item_id) for item_id in ids]
+            if ids is not None
+            else None
+        )
+        return self.store.fetch(self.collection, normalized_ids)
 
     def delete(self, ids: Sequence[str]) -> int:
         """Delete records by ids and return number of deleted rows."""
 
-        return self.store.delete(self.collection, ids)
+        normalized_ids = [self._normalize_id(item_id) for item_id in ids]
+        return self.store.delete(self.collection, normalized_ids)
+
+    def _validate_vector_dimension(self, vector: Sequence[float]) -> None:
+        if len(vector) != self.dimension:
+            raise ValueError(
+                f"Vector dimension mismatch: expected {self.dimension}, got {len(vector)}"
+            )
+
+    def _normalize_id(self, value: str) -> str:
+        if self.id_policy != VectorIdPolicy.UUID:
+            return value
+        try:
+            return str(UUID(str(value)))
+        except Exception as exc:
+            raise ValueError(
+                f"{type(self.store).__name__} requires UUID string ids. "
+                f"Invalid id: {value!r}"
+            ) from exc
