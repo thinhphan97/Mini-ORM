@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from mini_orm.core.conditions import C, Condition, OrderBy
+from mini_orm.core.conditions import C, Condition, ConditionGroup, NotCondition, OrderBy
 from mini_orm.core.query_builder import (
     append_limit_offset,
     compile_order_by,
@@ -31,6 +31,29 @@ class ConditionsTests(unittest.TestCase):
                 self.assertIsInstance(condition, Condition)
                 self.assertEqual(condition.op, op)
                 self.assertEqual(condition.is_unary, unary)
+
+    def test_group_factory_methods(self) -> None:
+        group_and = C.and_(C.eq("age", 18), C.eq("email", "a@x.com"))
+        group_or = C.or_(C.eq("age", 18), C.eq("age", 21))
+        negated = C.not_(C.eq("deleted", True))
+
+        self.assertIsInstance(group_and, ConditionGroup)
+        self.assertEqual(group_and.operator, "AND")
+        self.assertEqual(len(group_and.items), 2)
+
+        self.assertIsInstance(group_or, ConditionGroup)
+        self.assertEqual(group_or.operator, "OR")
+        self.assertEqual(len(group_or.items), 2)
+
+        self.assertIsInstance(negated, NotCondition)
+
+    def test_group_factory_validation(self) -> None:
+        with self.assertRaises(ValueError):
+            C.and_()
+        with self.assertRaises(TypeError):
+            C.or_(123)  # type: ignore[arg-type]
+        with self.assertRaises(TypeError):
+            C.not_(123)  # type: ignore[arg-type]
 
     def test_order_by_defaults(self) -> None:
         order = OrderBy("id")
@@ -81,6 +104,41 @@ class QueryBuilderTests(unittest.TestCase):
         self.assertEqual(in_fragment.sql, ' WHERE "id" IN (%s, %s)')
         self.assertEqual(in_fragment.params, [1, 2])
 
+    def test_compile_where_grouped_or_not(self) -> None:
+        grouped = compile_where(
+            C.or_(C.eq("email", "a@example.com"), C.eq("email", "b@example.com")),
+            self.named,
+        )
+        negated = compile_where(C.not_(C.eq("deleted", True)), self.named)
+
+        self.assertEqual(
+            grouped.sql,
+            ' WHERE (("email" = :email_1) OR ("email" = :email_2))',
+        )
+        self.assertEqual(
+            grouped.params,
+            {"email_1": "a@example.com", "email_2": "b@example.com"},
+        )
+        self.assertEqual(negated.sql, ' WHERE NOT ("deleted" = :deleted_1)')
+        self.assertEqual(negated.params, {"deleted_1": True})
+
+    def test_compile_where_sequence_with_group(self) -> None:
+        fragment = compile_where(
+            [
+                C.eq("active", True),
+                C.or_(C.eq("role", "admin"), C.eq("role", "owner")),
+            ],
+            self.named,
+        )
+        self.assertEqual(
+            fragment.sql,
+            ' WHERE "active" = :active_1 AND (("role" = :role_2) OR ("role" = :role_3))',
+        )
+        self.assertEqual(
+            fragment.params,
+            {"active_1": True, "role_2": "admin", "role_3": "owner"},
+        )
+
     def test_compile_order_by(self) -> None:
         sql = compile_order_by([OrderBy("age", desc=True), OrderBy("id")], self.named)
         self.assertEqual(sql, ' ORDER BY "age" DESC, "id" ASC')
@@ -118,6 +176,24 @@ class QueryBuilderTests(unittest.TestCase):
         )
         self.assertEqual(sql, 'SELECT * FROM "user"')
         self.assertIsNone(params)
+
+    def test_append_limit_offset_rejects_invalid_values(self) -> None:
+        with self.assertRaises(ValueError):
+            append_limit_offset(
+                'SELECT * FROM "user"',
+                None,
+                limit=0,
+                offset=None,
+                dialect=self.named,
+            )
+        with self.assertRaises(ValueError):
+            append_limit_offset(
+                'SELECT * FROM "user"',
+                None,
+                limit=1,
+                offset=-1,
+                dialect=self.named,
+            )
 
 
 if __name__ == "__main__":

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import sqlite3
 import unittest
+from datetime import date, datetime, time
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Optional
 
 from mini_orm import (
@@ -66,6 +68,17 @@ class TypedColumnsModel:
     age: Optional[int] = None
     score: Optional[float] = None
     name: str = ""
+
+
+@dataclass
+class RichTypedColumnsModel:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    enabled: bool = False
+    created_at: Optional[datetime] = None
+    birthday: Optional[date] = None
+    wakeup_at: Optional[time] = None
+    amount: Optional[Decimal] = None
+    raw: Optional[bytes] = None
 
 
 class SchemaIndexTests(unittest.TestCase):
@@ -149,6 +162,21 @@ class SchemaIndexTests(unittest.TestCase):
         self.assertIn('"score" REAL', sql)
         self.assertIn('"name" TEXT', sql)
 
+    def test_create_table_sql_maps_rich_types(self) -> None:
+        sql = create_table_sql(RichTypedColumnsModel, self.dialect)
+        self.assertIn('"enabled" BOOLEAN', sql)
+        self.assertIn('"created_at" TIMESTAMP', sql)
+        self.assertIn('"birthday" DATE', sql)
+        self.assertIn('"wakeup_at" TIME', sql)
+        self.assertIn('"amount" NUMERIC', sql)
+        self.assertIn('"raw" BLOB', sql)
+
+    def test_create_schema_sql_if_not_exists(self) -> None:
+        sql_list = create_schema_sql(IndexedUser, self.dialect, if_not_exists=True)
+        self.assertTrue(sql_list[0].startswith('CREATE TABLE IF NOT EXISTS "indexeduser"'))
+        self.assertTrue(any("CREATE INDEX IF NOT EXISTS" in sql for sql in sql_list[1:]))
+        self.assertTrue(any("CREATE UNIQUE INDEX IF NOT EXISTS" in sql for sql in sql_list[1:]))
+
     def test_apply_schema_creates_table_and_indexes(self) -> None:
         conn = sqlite3.connect(":memory:")
         db = Database(conn, self.dialect)
@@ -164,6 +192,22 @@ class SchemaIndexTests(unittest.TestCase):
         index_names = {row[1] for row in index_rows}
 
         self.assertEqual(table_rows[0][0], "indexeduser")
+        self.assertIn("idx_email", index_names)
+        self.assertIn("idx_indexeduser_age", index_names)
+        self.assertIn("idx_email_age", index_names)
+        self.assertIn("uidx_indexeduser_score", index_names)
+
+        conn.close()
+
+    def test_apply_schema_if_not_exists_is_idempotent(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, self.dialect)
+
+        apply_schema(db, IndexedUser, if_not_exists=True)
+        apply_schema(db, IndexedUser, if_not_exists=True)
+
+        index_rows = conn.cursor().execute("PRAGMA index_list('indexeduser');").fetchall()
+        index_names = {row[1] for row in index_rows}
         self.assertIn("idx_email", index_names)
         self.assertIn("idx_indexeduser_age", index_names)
         self.assertIn("idx_email_age", index_names)
