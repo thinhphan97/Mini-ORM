@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, time
 from dataclasses import MISSING, dataclass
+from decimal import Decimal
 from typing import Any, Mapping, Sequence, Type, get_args, get_origin
 
 from .contracts import DatabasePort, DialectPort
@@ -27,7 +29,12 @@ class IndexSpec:
 IndexInput = str | Sequence[str] | Mapping[str, Any] | IndexSpec
 
 
-def create_table_sql(cls: Type[DataclassModel], dialect: DialectPort) -> str:
+def create_table_sql(
+    cls: Type[DataclassModel],
+    dialect: DialectPort,
+    *,
+    if_not_exists: bool = False,
+) -> str:
     """Build `CREATE TABLE` statement for a dataclass model.
 
     Args:
@@ -42,7 +49,8 @@ def create_table_sql(cls: Type[DataclassModel], dialect: DialectPort) -> str:
 
     table_sql = dialect.q(table_name(cls))
     column_definitions = [_column_sql(field, dialect) for field in model_fields(cls)]
-    return f"CREATE TABLE {table_sql} (\n  " + ",\n  ".join(column_definitions) + "\n);"
+    prefix = "CREATE TABLE IF NOT EXISTS" if if_not_exists else "CREATE TABLE"
+    return f"{prefix} {table_sql} (\n  " + ",\n  ".join(column_definitions) + "\n);"
 
 
 def create_index_sql(
@@ -52,6 +60,7 @@ def create_index_sql(
     *,
     unique: bool = False,
     name: str | None = None,
+    if_not_exists: bool = False,
 ) -> str:
     """Build one single-column index SQL statement.
 
@@ -71,10 +80,21 @@ def create_index_sql(
 
     require_dataclass_model(cls)
     spec = IndexSpec(columns=(column,), unique=unique, name=name)
-    return _build_index_sql(table_name(cls), spec, dialect, _model_column_names(cls))
+    return _build_index_sql(
+        table_name(cls),
+        spec,
+        dialect,
+        _model_column_names(cls),
+        if_not_exists=if_not_exists,
+    )
 
 
-def create_indexes_sql(cls: Type[DataclassModel], dialect: DialectPort) -> list[str]:
+def create_indexes_sql(
+    cls: Type[DataclassModel],
+    dialect: DialectPort,
+    *,
+    if_not_exists: bool = False,
+) -> list[str]:
     """Build index SQL statements from model field metadata and `__indexes__`.
 
     Supported field metadata keys:
@@ -100,16 +120,38 @@ def create_indexes_sql(cls: Type[DataclassModel], dialect: DialectPort) -> list[
     column_names = _model_column_names(cls)
 
     specs = _collect_index_specs(cls)
-    return [_build_index_sql(table, spec, dialect, column_names) for spec in specs]
+    return [
+        _build_index_sql(
+            table,
+            spec,
+            dialect,
+            column_names,
+            if_not_exists=if_not_exists,
+        )
+        for spec in specs
+    ]
 
 
-def create_schema_sql(cls: Type[DataclassModel], dialect: DialectPort) -> list[str]:
+def create_schema_sql(
+    cls: Type[DataclassModel],
+    dialect: DialectPort,
+    *,
+    if_not_exists: bool = False,
+) -> list[str]:
     """Build full schema SQL list (table first, then indexes)."""
 
-    return [create_table_sql(cls, dialect), *create_indexes_sql(cls, dialect)]
+    return [
+        create_table_sql(cls, dialect, if_not_exists=if_not_exists),
+        *create_indexes_sql(cls, dialect, if_not_exists=if_not_exists),
+    ]
 
 
-def apply_schema(db: DatabasePort, cls: Type[DataclassModel]) -> list[str]:
+def apply_schema(
+    db: DatabasePort,
+    cls: Type[DataclassModel],
+    *,
+    if_not_exists: bool = False,
+) -> list[str]:
     """Create table and all configured indexes for a model on a database.
 
     This is a convenience API to avoid manual loops:
@@ -123,7 +165,7 @@ def apply_schema(db: DatabasePort, cls: Type[DataclassModel]) -> list[str]:
         The list of executed SQL statements (table first, then indexes).
     """
 
-    statements = create_schema_sql(cls, db.dialect)
+    statements = create_schema_sql(cls, db.dialect, if_not_exists=if_not_exists)
     with db.transaction():
         for sql in statements:
             db.execute(sql)
@@ -215,6 +257,8 @@ def _build_index_sql(
     spec: IndexSpec,
     dialect: DialectPort,
     available_columns: set[str],
+    *,
+    if_not_exists: bool = False,
 ) -> str:
     _validate_index_columns(spec.columns, available_columns)
 
@@ -224,6 +268,8 @@ def _build_index_sql(
     columns_sql = ", ".join(dialect.q(column) for column in spec.columns)
 
     prefix = "CREATE UNIQUE INDEX" if spec.unique else "CREATE INDEX"
+    if if_not_exists and _supports_index_if_not_exists(dialect):
+        prefix += " IF NOT EXISTS"
     return f"{prefix} {index_sql} ON {table_sql} ({columns_sql});"
 
 
@@ -238,6 +284,11 @@ def _default_index_name(table: str, columns: Sequence[str], unique: bool) -> str
     raw_name = f"{prefix}_{table}_{'_'.join(columns)}"
     safe = "".join(char if char.isalnum() or char == "_" else "_" for char in raw_name)
     return safe
+
+
+def _supports_index_if_not_exists(dialect: DialectPort) -> bool:
+    name = getattr(dialect, "name", "").lower()
+    return name in {"sqlite", "postgres"}
 
 
 def _column_sql(field: Any, dialect: DialectPort) -> str:
@@ -262,6 +313,18 @@ def _resolve_sql_type(annotation: Any) -> str:
 
     if isinstance(annotation, str):
         lowered = annotation.lower()
+        if "bool" in lowered:
+            return "BOOLEAN"
+        if "datetime" in lowered:
+            return "TIMESTAMP"
+        if "date" in lowered:
+            return "DATE"
+        if "time" in lowered:
+            return "TIME"
+        if "decimal" in lowered:
+            return "NUMERIC"
+        if "bytes" in lowered:
+            return "BLOB"
         if "int" in lowered:
             return "INTEGER"
         if "float" in lowered:
@@ -270,6 +333,18 @@ def _resolve_sql_type(annotation: Any) -> str:
 
     base_type = _unwrap_optional(annotation)
 
+    if base_type is bool:
+        return "BOOLEAN"
+    if base_type is datetime:
+        return "TIMESTAMP"
+    if base_type is date:
+        return "DATE"
+    if base_type is time:
+        return "TIME"
+    if base_type is Decimal:
+        return "NUMERIC"
+    if base_type in {bytes, bytearray, memoryview}:
+        return "BLOB"
     if base_type is int:
         return "INTEGER"
     if base_type is float:

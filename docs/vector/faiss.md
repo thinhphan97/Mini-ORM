@@ -28,4 +28,4 @@ top = repo.query([0.1, 0.2, 0.25, 0.4], top_k=5)
 ## Notes
 
 - Supported metrics: `cosine`, `dot`, `l2`.
-- `filters` are ignored because Faiss query API has no standard payload filter.
+- `filters` are not supported and will raise `NotImplementedError`.
