@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Generic, List, Optional, Type, TypeVar
+from typing import Dict, Generic, List, Optional, Type, TypeVar
 
-from .models import DataclassModel, auto_pk_field, model_fields, pk_fields, table_name
+from .models import (
+    DataclassModel,
+    RelationSpec,
+    auto_pk_field,
+    model_fields,
+    model_relations,
+    pk_fields,
+    table_name,
+)
 
 T = TypeVar("T", bound=DataclassModel)
 
@@ -20,6 +28,7 @@ class ModelMetadata(Generic[T]):
     auto_pk: Optional[str]
     columns: List[str]
     writable_columns: List[str]
+    relations: Dict[str, RelationSpec]
 
 
 def build_model_metadata(model: Type[T]) -> ModelMetadata[T]:
@@ -52,4 +61,5 @@ def build_model_metadata(model: Type[T]) -> ModelMetadata[T]:
         auto_pk=auto_pk_name,
         columns=all_columns,
         writable_columns=writable_columns,
+        relations=model_relations(model),
     )

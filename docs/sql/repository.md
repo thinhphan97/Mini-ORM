@@ -63,3 +63,43 @@ row, created = repo.get_or_create(
 ```python
 row = repo.get(1)
 ```
+
+## Relations (create and query)
+
+Declare relations on model classes:
+
+```python
+@dataclass
+class Author:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    name: str = ""
+
+@dataclass
+class Post:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    author_id: Optional[int] = field(default=None, metadata={"fk": (Author, "id")})
+    title: str = ""
+
+Author.__relations__ = {
+    "posts": {"model": Post, "local_key": "id", "remote_key": "author_id", "type": "has_many"}
+}
+Post.__relations__ = {
+    "author": {"model": Author, "local_key": "author_id", "remote_key": "id", "type": "belongs_to"}
+}
+```
+
+Create with related rows:
+
+```python
+author_repo.create(
+    Author(name="alice"),
+    relations={"posts": [Post(title="p1"), Post(title="p2")]},
+)
+```
+
+Query with relations:
+
+```python
+author_with_posts = author_repo.get_related(1, include=["posts"])
+posts_with_author = post_repo.list_related(include=["author"])
+```

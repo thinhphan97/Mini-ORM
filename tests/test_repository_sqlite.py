@@ -12,8 +12,40 @@ from mini_orm.ports.db_api.dialects import Dialect
 @dataclass
 class UserRow:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
-    email: str = ""
+    email: str = field(default="", metadata={"unique_index": True})
     age: Optional[int] = None
+
+
+@dataclass
+class AuthorRow:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    name: str = ""
+
+
+@dataclass
+class PostRow:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    author_id: Optional[int] = field(default=None, metadata={"fk": (AuthorRow, "id")})
+    title: str = ""
+
+
+AuthorRow.__relations__ = {
+    "posts": {
+        "model": PostRow,
+        "local_key": "id",
+        "remote_key": "author_id",
+        "type": "has_many",
+    }
+}
+
+PostRow.__relations__ = {
+    "author": {
+        "model": AuthorRow,
+        "local_key": "author_id",
+        "remote_key": "id",
+        "type": "belongs_to",
+    }
+}
 
 
 @dataclass
@@ -25,6 +57,12 @@ class OnlyPkRow:
 class MultiPkRow:
     id1: int = field(default=0, metadata={"pk": True})
     id2: int = field(default=0, metadata={"pk": True})
+
+
+@dataclass
+class NonUniqueLookupRow:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
 
 
 class PlainModel:
@@ -81,6 +119,15 @@ class RepositorySQLiteTests(unittest.TestCase):
             for user in users:
                 self.repo.insert(user)
         return users
+
+    def _relation_repositories(
+        self,
+    ) -> tuple[sqlite3.Connection, Repository[AuthorRow], Repository[PostRow]]:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, AuthorRow)
+        apply_schema(db, PostRow)
+        return conn, Repository[AuthorRow](db, AuthorRow), Repository[PostRow](db, PostRow)
 
     def test_insert_assigns_auto_pk(self) -> None:
         user = UserRow(email="new@example.com", age=20)
@@ -237,9 +284,57 @@ class RepositorySQLiteTests(unittest.TestCase):
         self.assertEqual(first.age, 33)
         self.assertEqual(second.id, first.id)
 
+    def test_get_or_create_insert_first_conflict_path(self) -> None:
+        existing = self.repo.insert(UserRow(email="conflict@example.com", age=20))
+
+        insert_call_count = 0
+        original_insert = self.repo.insert
+
+        def tracked_insert(obj: UserRow) -> UserRow:
+            nonlocal insert_call_count
+            insert_call_count += 1
+            return original_insert(obj)
+
+        self.repo.insert = tracked_insert  # type: ignore[method-assign]
+        row, created = self.repo.get_or_create(
+            lookup={"email": "conflict@example.com"},
+            defaults={"age": 99},
+        )
+
+        self.assertFalse(created)
+        self.assertEqual(insert_call_count, 1)
+        self.assertEqual(row.id, existing.id)
+
     def test_get_or_create_requires_lookup(self) -> None:
         with self.assertRaises(ValueError):
             self.repo.get_or_create(lookup={})
+
+    def test_get_or_create_requires_unique_lookup_constraint(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, NonUniqueLookupRow)
+        repo = Repository[NonUniqueLookupRow](db, NonUniqueLookupRow)
+
+        with self.assertRaises(ValueError):
+            repo.get_or_create(lookup={"email": "x@example.com"})
+        conn.close()
+
+    def test_get_or_create_reraises_non_integrity_errors(self) -> None:
+        def failing_insert(obj: UserRow) -> UserRow:  # noqa: ARG001
+            raise RuntimeError("boom")
+
+        self.repo.insert = failing_insert  # type: ignore[method-assign]
+        with self.assertRaises(RuntimeError):
+            self.repo.get_or_create(lookup={"email": "boom@example.com"})
+
+    def test_get_or_create_reraises_integrity_when_row_still_missing(self) -> None:
+        def failing_insert(obj: UserRow) -> UserRow:  # noqa: ARG001
+            raise sqlite3.IntegrityError("forced conflict")
+
+        self.repo.insert = failing_insert  # type: ignore[method-assign]
+        self.repo.list = lambda *args, **kwargs: []  # type: ignore[method-assign]
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.repo.get_or_create(lookup={"email": "missing@example.com"})
 
     def test_repository_requires_dataclass_and_single_pk(self) -> None:
         with self.assertRaises(TypeError):
@@ -268,6 +363,147 @@ class RepositorySQLiteTests(unittest.TestCase):
         self.assertIsNotNone(obj)
         with self.assertRaises(ValueError):
             repo.update(obj)
+        conn.close()
+
+    def test_create_with_has_many_relations(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, AuthorRow)
+        apply_schema(db, PostRow)
+        author_repo = Repository[AuthorRow](db, AuthorRow)
+        post_repo = Repository[PostRow](db, PostRow)
+
+        author = AuthorRow(name="Alice")
+        posts = [PostRow(title="Post A"), PostRow(title="Post B")]
+        author_repo.create(author, relations={"posts": posts})
+
+        self.assertIsNotNone(author.id)
+        self.assertEqual(post_repo.count(), 2)
+        loaded_posts = post_repo.list(order_by=[OrderBy("id")])
+        self.assertTrue(all(post.author_id == author.id for post in loaded_posts))
+        conn.close()
+
+    def test_create_with_belongs_to_relation(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, AuthorRow)
+        apply_schema(db, PostRow)
+        author_repo = Repository[AuthorRow](db, AuthorRow)
+        post_repo = Repository[PostRow](db, PostRow)
+
+        post = PostRow(title="Nested")
+        post_repo.create(post, relations={"author": AuthorRow(name="Nested Author")})
+
+        self.assertIsNotNone(post.id)
+        self.assertIsNotNone(post.author_id)
+        self.assertEqual(author_repo.count(), 1)
+        conn.close()
+
+    def test_get_related_and_list_related(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, AuthorRow)
+        apply_schema(db, PostRow)
+        author_repo = Repository[AuthorRow](db, AuthorRow)
+        post_repo = Repository[PostRow](db, PostRow)
+
+        author = author_repo.create(
+            AuthorRow(name="Reader"),
+            relations={"posts": [PostRow(title="T1"), PostRow(title="T2")]},
+        )
+
+        author_with_posts = author_repo.get_related(author.id, include=["posts"])
+        self.assertIsNotNone(author_with_posts)
+        self.assertEqual(len(author_with_posts.relations["posts"]), 2)
+
+        posts_with_author = post_repo.list_related(include=["author"], order_by=[OrderBy("id")])
+        self.assertEqual(len(posts_with_author), 2)
+        self.assertTrue(all(item.relations["author"] is not None for item in posts_with_author))
+        self.assertTrue(all(item.relations["author"].name == "Reader" for item in posts_with_author))
+        conn.close()
+
+    def test_get_related_returns_none_for_missing_row(self) -> None:
+        conn, author_repo, _ = self._relation_repositories()
+        self.assertIsNone(author_repo.get_related(9999, include=["posts"]))
+        conn.close()
+
+    def test_create_with_unknown_relation_raises(self) -> None:
+        conn, author_repo, post_repo = self._relation_repositories()
+        with self.assertRaises(ValueError):
+            author_repo.create(AuthorRow(name="A"), relations={"missing_relation": []})
+
+        self.assertEqual(author_repo.count(), 0)
+        self.assertEqual(post_repo.count(), 0)
+        conn.close()
+
+    def test_create_has_many_requires_sequence_and_rolls_back(self) -> None:
+        conn, author_repo, post_repo = self._relation_repositories()
+        with self.assertRaises(TypeError):
+            author_repo.create(
+                AuthorRow(name="A"),
+                relations={"posts": PostRow(title="must-be-sequence")},  # type: ignore[arg-type]
+            )
+
+        self.assertEqual(author_repo.count(), 0)
+        self.assertEqual(post_repo.count(), 0)
+        conn.close()
+
+    def test_create_has_many_rejects_invalid_child_type_and_rolls_back(self) -> None:
+        conn, author_repo, post_repo = self._relation_repositories()
+        with self.assertRaises(TypeError):
+            author_repo.create(
+                AuthorRow(name="A"),
+                relations={
+                    "posts": [
+                        PostRow(title="valid"),
+                        AuthorRow(name="invalid-child"),  # type: ignore[list-item]
+                    ]
+                },
+            )
+
+        self.assertEqual(author_repo.count(), 0)
+        self.assertEqual(post_repo.count(), 0)
+        conn.close()
+
+    def test_create_belongs_to_requires_model_type(self) -> None:
+        conn, author_repo, post_repo = self._relation_repositories()
+        with self.assertRaises(TypeError):
+            post_repo.create(PostRow(title="invalid"), relations={"author": "not-a-model"})  # type: ignore[arg-type]
+
+        self.assertEqual(author_repo.count(), 0)
+        self.assertEqual(post_repo.count(), 0)
+        conn.close()
+
+    def test_get_related_for_belongs_to_returns_none_when_fk_is_null(self) -> None:
+        conn, _, post_repo = self._relation_repositories()
+        post = post_repo.insert(PostRow(title="Orphan", author_id=None))
+        result = post_repo.get_related(post.id, include=["author"])
+
+        self.assertIsNotNone(result)
+        self.assertIsNone(result.relations["author"])
+        conn.close()
+
+    def test_list_related_validates_include_items(self) -> None:
+        conn, _, post_repo = self._relation_repositories()
+        with self.assertRaises(TypeError):
+            post_repo.list_related(include=["author", ""])
+        with self.assertRaises(TypeError):
+            post_repo.list_related(include=[123])  # type: ignore[list-item]
+        conn.close()
+
+    def test_list_related_validates_unknown_relation_name(self) -> None:
+        conn, _, post_repo = self._relation_repositories()
+        with self.assertRaises(ValueError):
+            post_repo.list_related(include=["missing"])
+        conn.close()
+
+    def test_list_related_deduplicates_include_names(self) -> None:
+        conn, _, post_repo = self._relation_repositories()
+        post_repo.create(PostRow(title="One"), relations={"author": AuthorRow(name="Single")})
+
+        rows = post_repo.list_related(include=["author", "author"])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(list(rows[0].relations.keys()), ["author"])
         conn.close()
 
 
