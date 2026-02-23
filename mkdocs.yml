@@ -1,0 +1,57 @@
+site_name: mini_orm
+site_description: Minimal ORM with SQL and vector store ports
+site_url: https://example.com/mini_orm
+repo_name: mini_orm
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+  language: en
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - .
+          options:
+            show_root_heading: true
+            show_root_toc_entry: true
+            show_source: false
+            inherited_members: true
+            members_order: source
+            filters:
+              - "!^_"
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - SQL ORM:
+      - Overview: sql/overview.md
+      - Schema & Indexing: sql/schema-indexing.md
+      - Repository Queries: sql/repository.md
+  - Vector:
+      - Overview: vector/overview.md
+      - Qdrant Adapter: vector/qdrant.md
+      - Chroma Adapter: vector/chroma.md
+      - Faiss Adapter: vector/faiss.md
+  - API Reference:
+      - Package: api/package.md
+      - Core: api/core.md
+      - Ports: api/ports.md
+  - Development: development.md

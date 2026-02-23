@@ -1,0 +1,55 @@
+# Schema and Indexing
+
+`mini_orm` can generate table and index SQL directly from dataclass definitions.
+
+## Field-level index
+
+```python
+from dataclasses import dataclass, field
+from typing import Optional
+
+@dataclass
+class User:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = field(default="", metadata={"index": True})
+    username: str = field(default="", metadata={"unique_index": True})
+```
+
+Supported metadata keys:
+
+- `pk=True`: primary key
+- `auto=True`: auto-increment PK behavior
+- `index=True`: normal index
+- `unique_index=True`: unique index
+- `index_name="..."`: custom single-column index name
+
+## Multi-column index
+
+```python
+@dataclass
+class User:
+    ...
+    __indexes__ = [
+        ("email", "username"),
+        {"columns": ("email", "age"), "unique": False, "name": "idx_user_email_age"},
+    ]
+```
+
+## Apply table + indexes in one call
+
+```python
+from mini_orm import apply_schema
+
+apply_schema(db, User)
+```
+
+`apply_schema` executes table creation first, then all configured indexes in the same transaction.
+
+## Manual SQL generation
+
+```python
+from mini_orm import create_table_sql, create_indexes_sql
+
+table_sql = create_table_sql(User, db.dialect)
+index_sql_list = create_indexes_sql(User, db.dialect)
+```
