@@ -42,6 +42,14 @@ class DialectTests(unittest.TestCase):
         cursor = _DummyCursor(lastrowid=99)
         self.assertEqual(sqlite_dialect.get_lastrowid(cursor), 99)
 
+    @unittest.expectedFailure
+    def test_identifier_quoting_escapes_quote_character(self) -> None:
+        sqlite_dialect = SQLiteDialect()
+        mysql_dialect = MySQLDialect()
+
+        self.assertEqual(sqlite_dialect.q('bad"name'), '"bad""name"')
+        self.assertEqual(mysql_dialect.q("bad`name"), "`bad``name`")
+
 
 class DatabaseAdapterTests(unittest.TestCase):
     def test_execute_fetchone_fetchall(self) -> None:

@@ -298,6 +298,24 @@ class QdrantLocalVectorFlowTests(unittest.TestCase):
             self.assertEqual(hits[0].id, expected_first)
             self.assertEqual(len(hits), 3)
 
+    @unittest.expectedFailure
+    def test_qdrant_delete_counts_only_existing_records(self) -> None:
+        store = QdrantVectorStore(location=":memory:")
+        repo = VectorRepository(
+            store,
+            "qdrant_delete_count",
+            dimension=2,
+            metric=VectorMetric.COSINE,
+            auto_create=True,
+            overwrite=True,
+        )
+        existing = "11111111-1111-1111-1111-111111111111"
+        missing = "22222222-2222-2222-2222-222222222222"
+        repo.upsert([VectorRecord(existing, [1, 0], {"kind": "x"})])
+
+        deleted = repo.delete([existing, missing])
+        self.assertEqual(deleted, 1)
+
 
 @unittest.skipUnless(HAS_CHROMA, "chromadb is not installed")
 class ChromaLocalVectorFlowTests(unittest.TestCase):
@@ -370,6 +388,39 @@ class ChromaLocalVectorFlowTests(unittest.TestCase):
             hits = repo.query(query_vector, top_k=3)
             self.assertEqual(hits[0].id, expected_first)
             self.assertEqual(len(hits), 3)
+
+    @unittest.expectedFailure
+    def test_chroma_upsert_allows_none_payload(self) -> None:
+        store = ChromaVectorStore(path=":memory:")
+        repo = VectorRepository(
+            store,
+            "chroma_none_payload",
+            dimension=2,
+            metric=VectorMetric.COSINE,
+            auto_create=True,
+            overwrite=True,
+        )
+        repo.upsert([VectorRecord("u1", [1, 0], None)])
+
+        fetched = repo.fetch(ids=["u1"])
+        self.assertEqual(len(fetched), 1)
+        self.assertIsNone(fetched[0].payload)
+
+    @unittest.expectedFailure
+    def test_chroma_delete_counts_only_existing_records(self) -> None:
+        store = ChromaVectorStore(path=":memory:")
+        repo = VectorRepository(
+            store,
+            "chroma_delete_count",
+            dimension=2,
+            metric=VectorMetric.COSINE,
+            auto_create=True,
+            overwrite=True,
+        )
+        repo.upsert([VectorRecord("u1", [1, 0], {"kind": "x"})])
+
+        deleted = repo.delete(["u1", "missing"])
+        self.assertEqual(deleted, 1)
 
 
 @unittest.skipUnless(HAS_FAISS, "faiss/numpy is not installed")

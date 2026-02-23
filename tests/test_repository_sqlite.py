@@ -17,6 +17,11 @@ class UserRow:
 
 
 @dataclass
+class OnlyPkRow:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+
+
+@dataclass
 class MultiPkRow:
     id1: int = field(default=0, metadata={"pk": True})
     id2: int = field(default=0, metadata={"pk": True})
@@ -148,6 +153,32 @@ class RepositorySQLiteTests(unittest.TestCase):
             Repository(self.db, PlainModel)
         with self.assertRaises(ValueError):
             Repository(self.db, MultiPkRow)
+
+    @unittest.expectedFailure
+    def test_insert_with_only_auto_pk_model_uses_default_values(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, OnlyPkRow)
+        repo = Repository[OnlyPkRow](db, OnlyPkRow)
+
+        obj = repo.insert(OnlyPkRow())
+        self.assertIsNotNone(obj.id)
+        conn.close()
+
+    @unittest.expectedFailure
+    def test_update_with_only_auto_pk_model_should_not_emit_empty_set(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, OnlyPkRow)
+        repo = Repository[OnlyPkRow](db, OnlyPkRow)
+
+        db.execute('INSERT INTO "onlypkrow" DEFAULT VALUES;')
+        obj = repo.get(1)
+        self.assertIsNotNone(obj)
+
+        with self.assertRaises(ValueError):
+            repo.update(obj)
+        conn.close()
 
 
 if __name__ == "__main__":
