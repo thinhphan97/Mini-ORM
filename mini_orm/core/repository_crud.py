@@ -405,16 +405,24 @@ def _encode_condition(model: Any, condition: Condition) -> Condition:
     if condition.is_unary:
         return condition
     if condition.op == "IN":
-        values = [serialize_model_value(model, condition.col, value) for value in condition.values or []]
         return Condition(
             col=condition.col,
             op=condition.op,
-            values=values,
+            values=[
+                serialize_model_value(model, condition.col, value)
+                for value in condition.values or []
+            ],
+            value=None,
             is_unary=False,
         )
     return Condition(
         col=condition.col,
         op=condition.op,
-        value=serialize_model_value(model, condition.col, condition.value),
+        value=serialize_model_value(
+            model,
+            condition.col,
+            condition.value,
+        ),
+        values=None,
         is_unary=False,
     )

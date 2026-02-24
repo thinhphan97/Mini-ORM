@@ -26,6 +26,7 @@ class Status(str, Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
 
+
 def main() -> None:
     store = InMemoryVectorStore()
     repo = VectorRepository(

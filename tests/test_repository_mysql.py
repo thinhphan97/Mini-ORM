@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from mini_orm import C, Database, MySQLDialect, OrderBy, Repository, apply_schema
+from tests._codec_roundtrip_mixin import CodecRoundtripMixin
 
 
 def _load_mysql_driver() -> tuple[str, Any] | tuple[None, None]:
@@ -115,7 +116,7 @@ def _mysql_connect(
 
 
 @unittest.skipUnless(HAS_MYSQL_DRIVER, "mysql driver is not installed")
-class RepositoryMySQLDialectTests(unittest.TestCase):
+class RepositoryMySQLDialectTests(CodecRoundtripMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.host = os.getenv("MINI_ORM_MYSQL_HOST", os.getenv("MYSQL_HOST", "localhost"))
@@ -165,6 +166,8 @@ class RepositoryMySQLDialectTests(unittest.TestCase):
         cls.author_repo = Repository[MySQLDialectAuthor](cls.db, MySQLDialectAuthor)
         cls.post_repo = Repository[MySQLDialectPost](cls.db, MySQLDialectPost)
         cls.codec_repo = Repository[MySQLCodecTicket](cls.db, MySQLCodecTicket)
+        cls.codec_ticket_cls = MySQLCodecTicket
+        cls.codec_closed_status = MySQLCodecStatus.CLOSED
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -251,39 +254,6 @@ class RepositoryMySQLDialectTests(unittest.TestCase):
         self.assertEqual(len(posts_with_author), 2)
         self.assertTrue(all(item.relations["author"] is not None for item in posts_with_author))
         self.assertTrue(all(item.relations["author"].name == "Reader" for item in posts_with_author))
-
-    def test_enum_and_json_codec_roundtrip(self) -> None:
-        with self.db.transaction():
-            ticket = self.codec_repo.insert(
-                MySQLCodecTicket(
-                    status=MySQLCodecStatus.CLOSED,
-                    payload={"priority": 2, "tags": ["bug"]},
-                    tags=["bug", "urgent"],
-                )
-            )
-
-        self.assertIsNotNone(ticket.id)
-
-        loaded = self.codec_repo.get(ticket.id)
-        self.assertIsNotNone(loaded)
-        self.assertEqual(loaded.status, MySQLCodecStatus.CLOSED)
-        self.assertEqual(loaded.payload, {"priority": 2, "tags": ["bug"]})
-        self.assertEqual(loaded.tags, ["bug", "urgent"])
-
-        rows = self.codec_repo.list(where=C.eq("status", MySQLCodecStatus.CLOSED))
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].id, ticket.id)
-
-        with self.db.transaction():
-            updated = self.codec_repo.update_where(
-                {"payload": {"priority": 1}},
-                where=C.eq("status", MySQLCodecStatus.CLOSED),
-            )
-        self.assertEqual(updated, 1)
-        refreshed = self.codec_repo.get(ticket.id)
-        self.assertEqual(refreshed.payload, {"priority": 1})
-        self.assertEqual(refreshed.tags, ["bug", "urgent"])
-
 
 if __name__ == "__main__":
     unittest.main()

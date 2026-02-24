@@ -90,6 +90,9 @@ For full options and troubleshooting, see [`docs/sql/repository.md`](sql/reposit
 
 ## Quick codec setup (Enum/JSON)
 
+Before calling `repo.insert(...)` / `repo.list(...)`, obtain a `Repository[Article]`
+instance from your MiniORM database/session and bind it to `repo`.
+
 ```python
 from dataclasses import dataclass, field
 from enum import Enum

@@ -329,6 +329,29 @@ class VectorRepositoryTests(unittest.TestCase):
         loaded = repo.fetch(ids=["r1"])[0]
         self.assertEqual(loaded.payload["note"], prefixed)
 
+    def test_payload_codec_json_preserves_user_dict_with_codec_key(self) -> None:
+        codec = JsonVectorPayloadCodec()
+        user_dict = {"__miniorm_codec__": "date", "value": "2026-02-24"}
+        store = InMemoryVectorStore()
+        repo = VectorRepository(
+            store,
+            "json_codec_dict_collision",
+            dimension=2,
+            auto_create=True,
+            payload_codec=codec,
+        )
+        repo.upsert([VectorRecord("r1", [1, 0], {"meta": user_dict})])
+
+        raw = store.fetch("json_codec_dict_collision", ids=["r1"])[0]
+        self.assertIsInstance(raw.payload["meta"], str)
+        self.assertIn('"__miniorm_codec__":"dict"', raw.payload["meta"])
+
+        loaded = repo.fetch(ids=["r1"])[0]
+        self.assertEqual(loaded.payload["meta"], user_dict)
+
+        hits = repo.query([1, 0], top_k=1, filters={"meta": user_dict})
+        self.assertEqual([item.id for item in hits], ["r1"])
+
     def test_payload_codec_json_rejects_unsupported_value_type(self) -> None:
         class Unsupported:
             pass
