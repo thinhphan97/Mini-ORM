@@ -13,7 +13,7 @@ def _load_connect() -> Any:
     for module_name in ("psycopg", "psycopg2"):
         try:
             module = importlib.import_module(module_name)
-        except Exception:
+        except (ModuleNotFoundError, ImportError):
             continue
         connect = getattr(module, "connect", None)
         if connect is not None:

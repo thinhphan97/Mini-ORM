@@ -13,7 +13,7 @@ def _load_mysql_driver() -> tuple[str, Any] | tuple[None, None]:
     for module_name in ("MySQLdb", "pymysql", "mysql.connector"):
         try:
             module = importlib.import_module(module_name)
-        except Exception:
+        except ImportError:
             continue
         connect = getattr(module, "connect", None)
         if connect is not None:
