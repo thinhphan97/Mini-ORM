@@ -15,6 +15,13 @@ pip install -r requirements-build.txt
 
 Artifacts are generated under `dist/` (`.whl` and `.tar.gz`).
 
+## Publish artifacts
+
+```bash
+pip install -r requirements-publish.txt
+python3 -m twine upload dist/*
+```
+
 ## Build docs locally
 
 ```bash

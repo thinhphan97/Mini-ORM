@@ -87,6 +87,13 @@ pip install -r requirements-build.txt
 ./scripts/build_lib.sh
 ```
 
+## Publish library
+
+```bash
+pip install -r requirements-publish.txt
+python3 -m twine upload dist/*
+```
+
 ## MySQL note
 
 When using `MySQLDialect`, current type mapping treats Python `str` fields as SQL `TEXT`.
