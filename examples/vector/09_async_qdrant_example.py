@@ -1,0 +1,74 @@
+"""Async Qdrant adapter example (optional dependency)."""
+
+from __future__ import annotations
+
+import asyncio
+import sys
+from pathlib import Path
+
+# Allow running this script directly from repository root.
+PROJECT_ROOT = next(
+    (parent for parent in Path(__file__).resolve().parents if (parent / "mini_orm").exists()),
+    None,
+)
+if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from mini_orm import (
+    AsyncVectorRepository,
+    QdrantVectorStore,
+    VectorMetric,
+    VectorRecord,
+)
+
+
+async def main() -> None:
+    try:
+        # location=":memory:" keeps everything in-process for easy local demo.
+        store = QdrantVectorStore(location=":memory:")
+    except ImportError as exc:
+        print("Qdrant async example skipped:", exc)
+        print("Install dependency: pip install qdrant-client")
+        return
+
+    repo = AsyncVectorRepository(
+        store,
+        "qdrant_async_users",
+        dimension=3,
+        metric=VectorMetric.COSINE,
+        auto_create=True,
+        overwrite=True,
+    )
+
+    # Qdrant requires UUID string IDs.
+    u1 = "11111111-1111-1111-1111-111111111111"
+    u2 = "22222222-2222-2222-2222-222222222222"
+    u3 = "33333333-3333-3333-3333-333333333333"
+
+    await repo.upsert(
+        [
+            VectorRecord(u1, [1.0, 0.0, 0.0], {"group": "a"}),
+            VectorRecord(u2, [0.0, 1.0, 0.0], {"group": "b"}),
+            VectorRecord(u3, [0.9, 0.1, 0.0], {"group": "a"}),
+        ]
+    )
+
+    print("Fetch by IDs:", await repo.fetch(ids=[u2, u1]))
+    print("Top hits:", await repo.query([1.0, 0.0, 0.0], top_k=2))
+    print(
+        "Filtered hits group=a:",
+        await repo.query([1.0, 0.0, 0.0], top_k=5, filters={"group": "a"}),
+    )
+
+    deleted = await repo.delete([u2, "44444444-4444-4444-4444-444444444444"])
+    print("Deleted count:", deleted)
+    print("Remaining:", await repo.fetch())
+
+    try:
+        await repo.upsert([VectorRecord("not-a-uuid", [1.0, 0.0, 0.0], {"group": "x"})])
+    except ValueError as exc:
+        print("Expected UUID policy error:", exc)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

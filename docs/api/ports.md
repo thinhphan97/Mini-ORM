@@ -8,6 +8,10 @@
 
 ::: mini_orm.ports.db_api.database
 
+## `mini_orm.ports.db_api.async_database`
+
+::: mini_orm.ports.db_api.async_database
+
 ## `mini_orm.ports.vector.in_memory`
 
 ::: mini_orm.ports.vector.in_memory

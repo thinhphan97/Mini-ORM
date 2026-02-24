@@ -22,6 +22,11 @@ Lightweight Python ORM-style toolkit
   - One-call schema apply with `apply_schema(...)`
   - Idempotent mode with `if_not_exists=True`
 - SQL dialect adapters: SQLite, Postgres, MySQL (DB-API style).
+- Async SQL APIs with same repository method names:
+  - `AsyncDatabase`, `AsyncRepository[T]`, `apply_schema_async(...)`
+- Vector abstraction via `VectorRepository`:
+- Async vector APIs with same repository method names:
+  - `AsyncVectorRepository`
 - Vector abstraction via `VectorRepository`:
   - `InMemoryVectorStore` (built-in)
   - `QdrantVectorStore` (optional, requires `qdrant-client`)
@@ -68,6 +73,39 @@ rows = repo.list(
 )
 total = repo.count(where=C.like("email", "%@example.com"))
 ```
+
+## Quick usage (Async SQL)
+
+```python
+import asyncio
+import sqlite3
+from dataclasses import dataclass, field
+from typing import Optional
+
+from mini_orm import AsyncDatabase, AsyncRepository, SQLiteDialect, apply_schema_async
+
+@dataclass
+class User:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
+
+async def main() -> None:
+    conn = sqlite3.connect(":memory:")
+    db = AsyncDatabase(conn, SQLiteDialect())
+    await apply_schema_async(db, User)
+
+    repo = AsyncRepository[User](db, User)
+    await repo.insert(User(email="alice@example.com"))
+    rows = await repo.list()
+    print(rows)
+    conn.close()
+
+asyncio.run(main())
+```
+
+Async API keeps the same method names as sync (`insert`, `get`, `list`,
+`update`, `delete`, `count`, `exists`, `create`, `get_related`, ...). The only
+difference is `await` / `async with`.
 
 ## Relations via metadata
 
@@ -165,6 +203,23 @@ store = InMemoryVectorStore()
 repo = VectorRepository(store, "items", dimension=3, metric=VectorMetric.COSINE)
 repo.upsert([VectorRecord(id="1", vector=[0.1, 0.2, 0.3])])
 hits = repo.query([0.1, 0.2, 0.25], top_k=5)
+```
+
+## Quick usage (Async Vector)
+
+```python
+import asyncio
+
+from mini_orm import AsyncVectorRepository, InMemoryVectorStore, VectorRecord
+
+async def main() -> None:
+    store = InMemoryVectorStore()
+    repo = AsyncVectorRepository(store, "items", dimension=3)
+    await repo.upsert([VectorRecord(id="1", vector=[0.1, 0.2, 0.3])])
+    hits = await repo.query([0.1, 0.2, 0.25], top_k=5)
+    print(hits)
+
+asyncio.run(main())
 ```
 
 ## Run tests

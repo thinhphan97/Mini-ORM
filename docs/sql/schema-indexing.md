@@ -59,14 +59,19 @@ class User:
 ## Apply table + indexes in one call
 
 ```python
-from mini_orm import apply_schema
+from mini_orm import apply_schema, apply_schema_async
 
 apply_schema(db, User)
 # idempotent mode (safe to run repeatedly):
 apply_schema(db, User, if_not_exists=True)
+
+# async equivalent:
+await apply_schema_async(async_db, User)
+await apply_schema_async(async_db, User, if_not_exists=True)
 ```
 
 `apply_schema` executes table creation first, then all configured indexes in the same transaction.
+`apply_schema_async` uses the same SQL generation and behavior in async flow.
 
 ## Manual SQL generation
 

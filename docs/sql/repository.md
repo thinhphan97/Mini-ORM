@@ -1,6 +1,25 @@
 # Repository Queries
 
 `Repository[T]` provides single-table CRUD with optional filtering and pagination.
+`AsyncRepository[T]` provides the same API surface with `await`.
+
+## Async equivalent (same method names)
+
+```python
+await repo.insert(User(email="a@example.com", age=20))
+
+user = (await repo.list(where=C.eq("email", "a@example.com")))[0]
+user.age = 21
+await repo.update(user)
+
+await repo.delete(user)
+```
+
+`AsyncRepository` keeps sync method names:
+- `insert`, `update`, `delete`, `get`, `list`
+- `count`, `exists`, `insert_many`
+- `update_where`, `delete_where`, `get_or_create`
+- `create`, `get_related`, `list_related`
 
 ## Insert / update / delete
 
@@ -93,6 +112,12 @@ rows = repo.list(where=C.eq("status", Status.PUBLISHED))
 row = repo.get(1)
 ```
 
+Async:
+
+```python
+row = await repo.get(1)
+```
+
 ## Relations (create and query)
 
 Declare relation intent on FK metadata and let mini_orm infer relation specs.
@@ -179,6 +204,13 @@ Use `include=[...]` with `get_related`/`list_related`:
 ```python
 author_with_posts = author_repo.get_related(1, include=["posts"])
 posts_with_author = post_repo.list_related(include=["author"])
+```
+
+Async:
+
+```python
+author_with_posts = await author_repo.get_related(1, include=["posts"])
+posts_with_author = await post_repo.list_related(include=["author"])
 ```
 
 ### 6) Metadata formats supported for relation inference

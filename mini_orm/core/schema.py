@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Type
 
-from .contracts import DatabasePort, DialectPort
+from .contracts import AsyncDatabasePort, DatabasePort, DialectPort
 from .models import DataclassModel, model_fields, require_dataclass_model, table_name
 from .schema_columns import column_sql
 from .schema_indexes import (
@@ -103,4 +103,19 @@ def apply_schema(
     with db.transaction():
         for sql in statements:
             db.execute(sql)
+    return statements
+
+
+async def apply_schema_async(
+    db: AsyncDatabasePort,
+    cls: Type[DataclassModel],
+    *,
+    if_not_exists: bool = False,
+) -> list[str]:
+    """Async variant of `apply_schema` with identical SQL generation."""
+
+    statements = create_schema_sql(cls, db.dialect, if_not_exists=if_not_exists)
+    async with db.transaction():
+        for sql in statements:
+            await db.execute(sql)
     return statements
