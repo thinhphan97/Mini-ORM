@@ -39,10 +39,16 @@ class AsyncDatabase:
         """Execute SQL with optional parameters and return cursor."""
 
         cur = await _maybe_await(self.conn.cursor())
-        if params is None:
-            await _maybe_await(cur.execute(sql))
-        else:
-            await _maybe_await(cur.execute(sql, params))
+        try:
+            if params is None:
+                await _maybe_await(cur.execute(sql))
+            else:
+                await _maybe_await(cur.execute(sql, params))
+        except Exception:
+            close = getattr(cur, "close", None)
+            if callable(close):
+                await _maybe_await(close())
+            raise
         return cur
 
     def _row_to_mapping(self, cursor: Any, row: Any) -> RowMapping:

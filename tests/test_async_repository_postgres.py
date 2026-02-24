@@ -105,7 +105,7 @@ class AsyncRepositoryPostgresDialectTests(unittest.IsolatedAsyncioTestCase):
             cls.conn = POSTGRES_CONNECT(**params)
         except Exception as exc:
             raise unittest.SkipTest(
-                "PostgreSQL is not reachable at localhost:5432 "
+                f"PostgreSQL is not reachable at {params['host']}:{params['port']} "
                 f"with configured credentials: {exc}"
             ) from exc
 

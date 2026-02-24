@@ -5,10 +5,10 @@ from .database import Database
 from .dialects import Dialect, MySQLDialect, PostgresDialect, SQLiteDialect
 
 __all__ = [
-    "Database",
     "AsyncDatabase",
+    "Database",
     "Dialect",
-    "SQLiteDialect",
-    "PostgresDialect",
     "MySQLDialect",
+    "PostgresDialect",
+    "SQLiteDialect",
 ]

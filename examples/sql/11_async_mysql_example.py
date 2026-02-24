@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -95,6 +96,11 @@ async def main() -> None:
         "MINI_ORM_MYSQL_DATABASE",
         os.getenv("MYSQL_DATABASE", "mini_orm_test"),
     )
+    if not re.fullmatch(r"[A-Za-z0-9_]+", database):
+        raise ValueError(
+            "Invalid MINI_ORM_MYSQL_DATABASE/MYSQL_DATABASE value. "
+            "Use only letters, numbers, and underscores."
+        )
     bootstrap_db = os.getenv("MINI_ORM_MYSQL_BOOTSTRAP_DB", "mysql")
 
     try:

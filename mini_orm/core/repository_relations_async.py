@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, Mapping, Optional, Sequence, TypeVar
@@ -79,7 +80,7 @@ class AsyncRelationCoordinator(Generic[T]):
         loaded = await self._load_relations_for_objects(rows, include=include)
         return [
             AsyncRelatedResult(obj=row, relations=relations)
-            for row, relations in zip(rows, loaded)
+            for row, relations in zip(rows, loaded, strict=True)
         ]
 
     async def _insert_belongs_to_relations(
@@ -97,8 +98,12 @@ class AsyncRelationCoordinator(Generic[T]):
                 )
 
             related_repo = self._new_repo(spec.model)
-            await related_repo.insert(relation_value)
-            setattr(obj, spec.local_key, getattr(relation_value, spec.remote_key))
+            inserted_relation = await related_repo.insert(relation_value)
+            setattr(
+                obj,
+                spec.local_key,
+                getattr(inserted_relation, spec.remote_key),
+            )
 
     async def _insert_has_many_relations(
         self,
@@ -147,27 +152,35 @@ class AsyncRelationCoordinator(Generic[T]):
 
         results: list[dict[str, Any]] = [dict() for _ in objects]
 
+        tasks: list[Any] = []
         for relation_name in include_names:
             spec = self._relation_spec(relation_name)
             related_repo = self._new_repo(spec.model)
 
             if spec.many:
-                await self._attach_has_many_relation(
+                tasks.append(
+                    self._attach_has_many_relation(
+                        results,
+                        objects=objects,
+                        relation_name=relation_name,
+                        spec=spec,
+                        related_repo=related_repo,
+                    )
+                )
+                continue
+
+            tasks.append(
+                self._attach_belongs_to_relation(
                     results,
                     objects=objects,
                     relation_name=relation_name,
                     spec=spec,
                     related_repo=related_repo,
                 )
-                continue
-
-            await self._attach_belongs_to_relation(
-                results,
-                objects=objects,
-                relation_name=relation_name,
-                spec=spec,
-                related_repo=related_repo,
             )
+
+        if tasks:
+            await asyncio.gather(*tasks)
 
         return results
 

@@ -147,20 +147,6 @@ class AsyncVectorRepositoryTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "requires UUID"):
             await repo.delete(["not-a-uuid"])
 
-    async def test_vector_repository_validates_uuid_policy(self) -> None:
-        class _UUIDOnlyStore(InMemoryVectorStore):
-            id_policy = VectorIdPolicy.UUID
-
-        store = _UUIDOnlyStore()
-        repo = AsyncVectorRepository(store, "uuid_policy_2", dimension=2, auto_create=True)
-
-        with self.assertRaisesRegex(ValueError, "requires UUID"):
-            await repo.upsert([VectorRecord("not-a-uuid", [1, 0])])
-        with self.assertRaisesRegex(ValueError, "requires UUID"):
-            await repo.fetch(ids=["not-a-uuid"])
-        with self.assertRaisesRegex(ValueError, "requires UUID"):
-            await repo.delete(["not-a-uuid"])
-
     async def test_create_collection_validation(self) -> None:
         with self.assertRaises(ValueError):
             AsyncVectorRepository(InMemoryVectorStore(), "bad_dim", dimension=0)
@@ -834,7 +820,8 @@ class AsyncQdrantAdapterOptionalTests(unittest.TestCase):
 
         with patch("builtins.__import__", side_effect=fake_import):
             with self.assertRaises(ImportError):
-                QdrantVectorStore(location=tempfile.mkdtemp(prefix="mini_orm_qdrant_"))
+                with tempfile.TemporaryDirectory(prefix="mini_orm_qdrant_") as db_path:
+                    QdrantVectorStore(location=db_path)
 
 
 class AsyncChromaAdapterOptionalTests(unittest.TestCase):
@@ -848,7 +835,8 @@ class AsyncChromaAdapterOptionalTests(unittest.TestCase):
 
         with patch("builtins.__import__", side_effect=fake_import):
             with self.assertRaises(ImportError):
-                ChromaVectorStore(path=tempfile.mkdtemp(prefix="mini_orm_chroma_"))
+                with tempfile.TemporaryDirectory(prefix="mini_orm_chroma_") as db_path:
+                    ChromaVectorStore(path=db_path)
 
 
 class AsyncFaissAdapterOptionalTests(unittest.TestCase):
