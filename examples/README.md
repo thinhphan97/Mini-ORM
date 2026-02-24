@@ -14,6 +14,9 @@ python examples/sql/05_validation_and_error_cases.py
 python examples/sql/06_dialect_preview.py
 python examples/sql/07_relations_create_and_query.py
 python examples/sql/08_codec_serialize_deserialize.py
+python examples/sql/09_async_basic_crud.py
+python examples/sql/10_async_postgres_example.py
+python examples/sql/11_async_mysql_example.py
 
 python examples/vector/01_inmemory_basic.py
 python examples/vector/02_inmemory_metrics_and_filters.py
@@ -22,6 +25,10 @@ python examples/vector/04_qdrant_example.py
 python examples/vector/05_chroma_example.py
 python examples/vector/06_faiss_example.py
 python examples/vector/07_payload_codec.py
+python examples/vector/08_async_inmemory_basic.py
+python examples/vector/09_async_qdrant_example.py
+python examples/vector/10_async_chroma_example.py
+python examples/vector/11_async_faiss_example.py
 ```
 
 ## SQL examples
@@ -68,6 +75,18 @@ python examples/vector/07_payload_codec.py
   - Shows raw DB serialized values and model-level deserialized values.
   - Covers `insert`, `get`, `list(where=...)`, and `update_where`.
 
+- `examples/sql/09_async_basic_crud.py`
+  - Async API with same method names as sync (`insert/get/list/update/delete`).
+  - Uses `AsyncDatabase`, `AsyncRepository`, and `apply_schema_async`.
+
+- `examples/sql/10_async_postgres_example.py`
+  - Async SQL flow with `PostgresDialect` + `AsyncRepository`.
+  - Optional dependency/server script (safe skip when `psycopg` or server is missing).
+
+- `examples/sql/11_async_mysql_example.py`
+  - Async SQL flow with `MySQLDialect` + `AsyncRepository`.
+  - Optional dependency/server script (safe skip when mysql driver or server is missing).
+
 ## Vector examples
 
 - `examples/vector/01_inmemory_basic.py`
@@ -96,6 +115,22 @@ python examples/vector/07_payload_codec.py
   - Optional vector payload codec (`JsonVectorPayloadCodec`).
   - Shows raw backend payload vs decoded repository payload.
   - Demonstrates filter queries with Enum payload values.
+
+- `examples/vector/08_async_inmemory_basic.py`
+  - Async vector API with same method names as sync (`upsert/query/fetch/delete`).
+  - Uses `AsyncVectorRepository` over existing `InMemoryVectorStore`.
+
+- `examples/vector/09_async_qdrant_example.py`
+  - Async Qdrant usage and UUID ID policy behavior.
+  - Optional dependency script.
+
+- `examples/vector/10_async_chroma_example.py`
+  - Async Chroma usage with in-memory collection and filters.
+  - Optional dependency script.
+
+- `examples/vector/11_async_faiss_example.py`
+  - Async Faiss usage and unsupported-filter behavior.
+  - Optional dependency script.
 
 ## Optional dependency install
 
