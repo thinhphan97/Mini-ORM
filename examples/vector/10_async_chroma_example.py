@@ -23,6 +23,11 @@ from mini_orm import (
 
 
 async def metric_preview(metric: VectorMetric) -> None:
+    """Preview ranking metric behavior.
+
+    Requires `ChromaVectorStore` dependency (`chromadb`) to be importable;
+    otherwise constructing the store raises `ImportError`.
+    """
     store = ChromaVectorStore(path=":memory:")
     repo = AsyncVectorRepository(
         store,

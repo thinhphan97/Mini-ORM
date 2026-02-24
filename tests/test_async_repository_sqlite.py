@@ -192,6 +192,7 @@ class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> tuple[sqlite3.Connection, AsyncRepository[AuthorRow], AsyncRepository[PostRow]]:
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         db = AsyncDatabase(conn, SQLiteDialect())
         await apply_schema_async(db, AuthorRow)
         await apply_schema_async(db, PostRow)
@@ -438,6 +439,7 @@ class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_enum_and_json_codec_serialize_and_deserialize(self) -> None:
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         db = AsyncDatabase(conn, SQLiteDialect())
         await apply_schema_async(db, TicketRow)
         repo = AsyncRepository[TicketRow](db, TicketRow)
@@ -469,7 +471,6 @@ class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):
         refreshed = await repo.get(inserted.id)
         self.assertEqual(refreshed.payload, {"priority": 1})
         self.assertEqual(refreshed.tags, ["bug", "urgent"])
-        conn.close()
 
     async def test_insert_many(self) -> None:
         inserted = await self.repo.insert_many(
@@ -584,16 +585,17 @@ class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_insert_with_only_auto_pk_model_uses_default_values(self) -> None:
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         db = AsyncDatabase(conn, SQLiteDialect())
         await apply_schema_async(db, OnlyPkRow)
         repo = AsyncRepository[OnlyPkRow](db, OnlyPkRow)
 
         obj = await repo.insert(OnlyPkRow())
         self.assertIsNotNone(obj.id)
-        conn.close()
 
     async def test_update_with_only_auto_pk_model_raises_clear_error(self) -> None:
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         db = AsyncDatabase(conn, SQLiteDialect())
         await apply_schema_async(db, OnlyPkRow)
         repo = AsyncRepository[OnlyPkRow](db, OnlyPkRow)
@@ -603,11 +605,11 @@ class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(obj)
         with self.assertRaises(ValueError):
             await repo.update(obj)
-        conn.close()
 
     async def test_create_with_belongs_to_relation(self) -> None:
-        conn = sqlite3.connect(":memory:")
-        db = AsyncDatabase(conn, SQLiteDialect())
+        _conn = sqlite3.connect(":memory:")
+        self.addCleanup(_conn.close)
+        db = AsyncDatabase(_conn, SQLiteDialect())
         await apply_schema_async(db, AuthorRow)
         await apply_schema_async(db, PostRow)
         author_repo = AsyncRepository[AuthorRow](db, AuthorRow)
@@ -619,24 +621,21 @@ class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(post.id)
         self.assertIsNotNone(post.author_id)
         self.assertEqual(await author_repo.count(), 1)
-        conn.close()
 
     async def test_get_related_returns_none_for_missing_row(self) -> None:
-        conn, author_repo, _ = await self._relation_repositories()
+        _conn, author_repo, _ = await self._relation_repositories()
         self.assertIsNone(await author_repo.get_related(9999, include=["posts"]))
-        conn.close()
 
     async def test_create_with_unknown_relation_raises(self) -> None:
-        conn, author_repo, post_repo = await self._relation_repositories()
+        _conn, author_repo, post_repo = await self._relation_repositories()
         with self.assertRaises(ValueError):
             await author_repo.create(AuthorRow(name="A"), relations={"missing_relation": []})
 
         self.assertEqual(await author_repo.count(), 0)
         self.assertEqual(await post_repo.count(), 0)
-        conn.close()
 
     async def test_create_has_many_requires_sequence_and_rolls_back(self) -> None:
-        conn, author_repo, post_repo = await self._relation_repositories()
+        _conn, author_repo, post_repo = await self._relation_repositories()
         with self.assertRaises(TypeError):
             await author_repo.create(
                 AuthorRow(name="A"),
@@ -645,10 +644,9 @@ class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(await author_repo.count(), 0)
         self.assertEqual(await post_repo.count(), 0)
-        conn.close()
 
     async def test_create_has_many_rejects_invalid_child_type_and_rolls_back(self) -> None:
-        conn, author_repo, post_repo = await self._relation_repositories()
+        _conn, author_repo, post_repo = await self._relation_repositories()
         with self.assertRaises(TypeError):
             await author_repo.create(
                 AuthorRow(name="A"),
@@ -662,48 +660,42 @@ class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(await author_repo.count(), 0)
         self.assertEqual(await post_repo.count(), 0)
-        conn.close()
 
     async def test_create_belongs_to_requires_model_type(self) -> None:
-        conn, author_repo, post_repo = await self._relation_repositories()
+        _conn, author_repo, post_repo = await self._relation_repositories()
         with self.assertRaises(TypeError):
             await post_repo.create(PostRow(title="invalid"), relations={"author": "not-a-model"})  # type: ignore[arg-type]
 
         self.assertEqual(await author_repo.count(), 0)
         self.assertEqual(await post_repo.count(), 0)
-        conn.close()
 
     async def test_get_related_for_belongs_to_returns_none_when_fk_is_null(self) -> None:
-        conn, _, post_repo = await self._relation_repositories()
+        _conn, _, post_repo = await self._relation_repositories()
         post = await post_repo.insert(PostRow(title="Orphan", author_id=None))
         result = await post_repo.get_related(post.id, include=["author"])
 
         self.assertIsNotNone(result)
         self.assertIsNone(result.relations["author"])
-        conn.close()
 
     async def test_list_related_validates_include_items(self) -> None:
-        conn, _, post_repo = await self._relation_repositories()
+        _conn, _, post_repo = await self._relation_repositories()
         with self.assertRaises(TypeError):
             await post_repo.list_related(include=["author", ""])
         with self.assertRaises(TypeError):
             await post_repo.list_related(include=[123])  # type: ignore[list-item]
-        conn.close()
 
     async def test_list_related_validates_unknown_relation_name(self) -> None:
-        conn, _, post_repo = await self._relation_repositories()
+        _conn, _, post_repo = await self._relation_repositories()
         with self.assertRaises(ValueError):
             await post_repo.list_related(include=["missing"])
-        conn.close()
 
     async def test_list_related_deduplicates_include_names(self) -> None:
-        conn, _, post_repo = await self._relation_repositories()
+        _conn, _, post_repo = await self._relation_repositories()
         await post_repo.create(PostRow(title="One"), relations={"author": AuthorRow(name="Single")})
 
         rows = await post_repo.list_related(include=["author", "author"])
         self.assertEqual(len(rows), 1)
         self.assertEqual(list(rows[0].relations.keys()), ["author"])
-        conn.close()
 
     async def test_relations_can_be_inferred_from_fk_metadata(self) -> None:
         conn = sqlite3.connect(":memory:")

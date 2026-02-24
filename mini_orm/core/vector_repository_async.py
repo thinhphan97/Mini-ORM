@@ -53,7 +53,7 @@ class AsyncVectorRepository:
         self.payload_codec = payload_codec or IdentityVectorPayloadCodec()
 
         if auto_create:
-            create_collection_fn = getattr(self.store, "create_collection")
+            create_collection_fn = self.store.create_collection
             if inspect.iscoroutinefunction(create_collection_fn):
                 raise ValueError(
                     "auto_create=True is not supported for async vector stores in "

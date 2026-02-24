@@ -66,7 +66,7 @@ async def main() -> None:
 
     try:
         conn = connect(**params)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - pragmatic cross-driver OperationalError handling (psycopg/psycopg2)
         print("Postgres async example skipped:", exc)
         return
 

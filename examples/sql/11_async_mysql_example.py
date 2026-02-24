@@ -132,7 +132,9 @@ async def main() -> None:
             password=password,
             database=database,
         )
-    except Exception as exc:
+    # Intentional broad catch for demo portability across mysqlclient/pymysql/mysql-connector.
+    # Production code should catch driver-specific exceptions.
+    except Exception as exc:  # noqa: BLE001
         print("MySQL async example skipped:", exc)
         return
 

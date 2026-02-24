@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, Mapping, Optional, Sequence, TypeVar
@@ -179,8 +178,8 @@ class AsyncRelationCoordinator(Generic[T]):
                 )
             )
 
-        if tasks:
-            await asyncio.gather(*tasks)
+        for coro in tasks:
+            await coro
 
         return results
 

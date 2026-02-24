@@ -18,7 +18,12 @@ from mini_orm import AsyncVectorRepository, FaissVectorStore, VectorMetric, Vect
 
 
 async def metric_preview(metric: VectorMetric) -> None:
-    store = FaissVectorStore()
+    """Preview metric behavior for `AsyncVectorRepository` with `FaissVectorStore`."""
+    try:
+        store = FaissVectorStore()
+    except ImportError as exc:
+        print("Faiss metric preview skipped:", exc)
+        return
     repo = AsyncVectorRepository(
         store,
         f"faiss_async_metric_{metric.value}",
