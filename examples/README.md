@@ -52,7 +52,7 @@ python examples/vector/06_faiss_example.py
     and `MySQLDialect`.
 
 - `examples/sql/07_relations_create_and_query.py`
-  - Declare model relations with `__relations__` (`has_many`, `belongs_to`).
+  - Declare relation intent on FK metadata (`relation`, `related_name`).
   - Create parent/child graph in one call via `repo.create(..., relations=...)`.
   - Query rows with included relations via `get_related(...)` and `list_related(...)`.
 

@@ -6,7 +6,7 @@ Lightweight Python ORM-style toolkit
 
 - Dataclass-based SQL models.
 - Single-table CRUD via `Repository[T]`.
-- Model relations via `__relations__` (`belongs_to`, `has_many`) with:
+- Model relations inferred from `fk` metadata (or explicit `__relations__` override) with:
   - create with nested relation data (`repo.create(..., relations=...)`)
   - eager loading (`get_related`, `list_related`)
 - Safe query building (`where`, `AND/OR/NOT`, `order by`, `limit`, `offset`).
