@@ -24,6 +24,19 @@ Supported metadata keys:
 - `index_name="..."`: custom single-column index name
 - `fk=...`: foreign key reference (`"table.column"`, `(ModelOrTable, "column")`, or `{"model": Model, "column": "id"}`)
 
+## MySQL limitation for string indexes
+
+With `MySQLDialect`, Python `str` currently maps to SQL `TEXT`.
+MySQL requires a key length when indexing `TEXT`, so `index=True` or
+`unique_index=True` on `str` fields can fail during `apply_schema(...)` with:
+
+`BLOB/TEXT column '...' used in key specification without a key length`
+
+Recommended workaround:
+
+- avoid `index`/`unique_index` on `str` fields when using MySQL, or
+- use custom schema/type mapping so indexed string columns become `VARCHAR(n)`.
+
 ## Multi-column index
 
 ```python
