@@ -6,6 +6,15 @@
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
+## Build library artifacts
+
+```bash
+pip install -r requirements-build.txt
+./scripts/build_lib.sh
+```
+
+Artifacts are generated under `dist/` (`.whl` and `.tar.gz`).
+
 ## Build docs locally
 
 ```bash

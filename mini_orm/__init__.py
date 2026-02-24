@@ -1,5 +1,7 @@
 """Mini ORM package exports."""
 
+__version__ = "0.1.0"
+
 from .core import (
     C,
     Condition,
@@ -37,6 +39,7 @@ from .ports import (
 )
 
 __all__ = [
+    "__version__",
     "C",
     "Condition",
     "ConditionGroup",
