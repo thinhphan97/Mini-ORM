@@ -6,6 +6,8 @@ from typing import Optional
 
 from mini_orm.core.metadata import build_model_metadata
 from mini_orm.core.models import (
+    _infer_has_many_relations,
+    _parse_relation_type,
     RelationSpec,
     RelationType,
     auto_pk_field,
@@ -83,6 +85,21 @@ class MetaPost:
         },
     )
     title: str = ""
+
+
+@dataclass
+class OverrideTeamModel:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    name: str = ""
+
+
+@dataclass
+class OverrideMemberModel:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    team_id: Optional[int] = field(
+        default=None,
+        metadata={"fk": (OverrideTeamModel, "id"), "related_name": "members"},
+    )
 
 
 class PlainObject:
@@ -229,6 +246,13 @@ class ModelsAndMetadataTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             model_relations(InvalidRelationTypeModel)
 
+    def test_parse_relation_type_rejects_invalid_string(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            r"unsupported type 'many_to_many'",
+        ):
+            _parse_relation_type("many_to_many", relation_name="company")
+
     def test_model_relations_accept_relation_type_enum(self) -> None:
         @dataclass
         class EnumRelationModel:
@@ -264,26 +288,20 @@ class ModelsAndMetadataTests(unittest.TestCase):
         self.assertIs(author_relations["posts"].model, MetaPost)
 
     def test_explicit_relations_override_equivalent_inferred_specs(self) -> None:
-        @dataclass
-        class Team:
-            id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
-            name: str = ""
+        inferred = _infer_has_many_relations(OverrideTeamModel)
+        self.assertIn("members", inferred)
+        self.assertIs(inferred["members"].model, OverrideMemberModel)
 
-        @dataclass
-        class Member:
-            id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
-            team_id: Optional[int] = field(default=None, metadata={"fk": (Team, "id")})
-
-        Team.__relations__ = {
+        OverrideTeamModel.__relations__ = {
             "members": {
-                "model": Member,
+                "model": OverrideMemberModel,
                 "local_key": "id",
                 "remote_key": "team_id",
                 "type": "has_many",
             }
         }
 
-        relations = model_relations(Team)
+        relations = model_relations(OverrideTeamModel)
         self.assertEqual(list(relations.keys()), ["members"])
 
     def test_model_relations_validate_model_must_be_dataclass(self) -> None:

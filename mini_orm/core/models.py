@@ -309,7 +309,7 @@ def _parse_relation_type(raw: Any, *, relation_name: str) -> Optional[RelationTy
     if isinstance(raw, str):
         try:
             return RelationType(raw)
-        except ValueError as exc:  # pragma: no cover - explicit branch below
+        except ValueError as exc:
             raise ValueError(
                 f"Relation {relation_name!r} has unsupported type {raw!r}. "
                 "Use 'has_many' or 'belongs_to'."

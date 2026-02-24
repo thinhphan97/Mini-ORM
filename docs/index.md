@@ -58,6 +58,9 @@ total = repo.count(where=C.like("email", "%@example.com"))
 ## Relations via metadata (quick view)
 
 ```python
+from dataclasses import dataclass, field
+from typing import Optional
+
 @dataclass
 class Author:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})

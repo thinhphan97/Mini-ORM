@@ -13,6 +13,14 @@
 Relation specs can be inferred directly from FK field metadata:
 
 ```python
+from dataclasses import dataclass, field
+from typing import Optional
+
+@dataclass
+class Author:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    name: str = ""
+
 @dataclass
 class Post:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
