@@ -6,6 +6,7 @@ from uuid import UUID
 from typing import Any, Mapping, Optional, Sequence
 
 from .contracts import VectorStorePort
+from .vector_codecs import IdentityVectorPayloadCodec, VectorPayloadCodec
 from .vector_metrics import VectorMetric, VectorMetricInput, normalize_vector_metric
 from .vector_policies import VectorIdPolicy
 from .vector_types import VectorRecord, VectorSearchResult
@@ -23,6 +24,7 @@ class VectorRepository:
         metric: VectorMetricInput = VectorMetric.COSINE,
         auto_create: bool = True,
         overwrite: bool = False,
+        payload_codec: VectorPayloadCodec | None = None,
     ) -> None:
         """Create a vector repository.
 
@@ -33,6 +35,8 @@ class VectorRepository:
             metric: Distance/similarity metric (`str` or `VectorMetric`).
             auto_create: Auto create collection on repository initialization.
             overwrite: Recreate collection if already exists (used with auto_create).
+            payload_codec: Optional codec used to serialize/deserialize payload and
+                query filter values.
         """
 
         if dimension <= 0:
@@ -44,6 +48,7 @@ class VectorRepository:
         self.metric = normalize_vector_metric(metric)
         self.id_policy = getattr(store, "id_policy", VectorIdPolicy.ANY)
         self.supports_filters = bool(getattr(store, "supports_filters", True))
+        self.payload_codec = payload_codec or IdentityVectorPayloadCodec()
 
         if auto_create:
             self.store.create_collection(
@@ -74,7 +79,7 @@ class VectorRepository:
                 VectorRecord(
                     id=record_id,
                     vector=record.vector,
-                    payload=record.payload,
+                    payload=self.payload_codec.serialize(record.payload),
                 )
             )
         self.store.upsert(self.collection, normalized_records)
@@ -93,12 +98,21 @@ class VectorRepository:
             )
         self._validate_vector_dimension(vector)
 
-        return self.store.query(
+        serialized_filters = self.payload_codec.serialize_filters(filters) if filters else None
+        raw_results = self.store.query(
             self.collection,
             vector,
             top_k=top_k,
-            filters=filters,
+            filters=serialized_filters,
         )
+        return [
+            VectorSearchResult(
+                id=item.id,
+                score=item.score,
+                payload=self.payload_codec.deserialize(item.payload),
+            )
+            for item in raw_results
+        ]
 
     def fetch(self, ids: Optional[Sequence[str]] = None) -> list[VectorRecord]:
         """Fetch records by ids, or fetch all when ids is None."""
@@ -108,7 +122,15 @@ class VectorRepository:
             if ids is not None
             else None
         )
-        return self.store.fetch(self.collection, normalized_ids)
+        rows = self.store.fetch(self.collection, normalized_ids)
+        return [
+            VectorRecord(
+                id=row.id,
+                vector=row.vector,
+                payload=self.payload_codec.deserialize(row.payload),
+            )
+            for row in rows
+        ]
 
     def delete(self, ids: Sequence[str]) -> int:
         """Delete records by ids and return number of deleted rows."""

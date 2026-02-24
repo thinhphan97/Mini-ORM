@@ -3,15 +3,22 @@ from __future__ import annotations
 import importlib
 import tempfile
 import unittest
+from datetime import date, datetime, time
+from decimal import Decimal
+from enum import Enum
 from unittest.mock import patch
+from uuid import UUID
 
 from mini_orm import (
     ChromaVectorStore,
     FaissVectorStore,
+    IdentityVectorPayloadCodec,
     InMemoryVectorStore,
+    JsonVectorPayloadCodec,
     QdrantVectorStore,
     VectorIdPolicy,
     VectorMetric,
+    VectorPayloadCodec,
     VectorRecord,
     VectorRepository,
 )
@@ -28,6 +35,11 @@ def _module_available(name: str) -> bool:
 HAS_QDRANT = _module_available("qdrant_client")
 HAS_CHROMA = _module_available("chromadb")
 HAS_FAISS = _module_available("faiss") and _module_available("numpy")
+
+
+class PayloadStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
 
 
 class InMemoryVectorStoreTests(unittest.TestCase):
@@ -224,6 +236,170 @@ class VectorRepositoryTests(unittest.TestCase):
             repo.fetch(ids=["not-a-uuid"])
         with self.assertRaisesRegex(ValueError, "requires UUID"):
             repo.delete(["not-a-uuid"])
+
+    def test_payload_codec_identity_keeps_behavior_unchanged(self) -> None:
+        store = InMemoryVectorStore()
+        repo = VectorRepository(
+            store,
+            "identity_codec",
+            dimension=2,
+            auto_create=True,
+            payload_codec=IdentityVectorPayloadCodec(),
+        )
+        payload = {"group": "a", "meta": {"k": 1}}
+        repo.upsert([VectorRecord("r1", [1, 0], payload)])
+
+        loaded = repo.fetch(ids=["r1"])[0]
+        self.assertEqual(loaded.payload, payload)
+
+        raw = store.fetch("identity_codec", ids=["r1"])[0]
+        self.assertEqual(raw.payload, payload)
+
+    def test_payload_codec_json_roundtrip_and_filter_encoding(self) -> None:
+        store = InMemoryVectorStore()
+        codec = JsonVectorPayloadCodec()
+        repo = VectorRepository(
+            store,
+            "json_codec",
+            dimension=2,
+            auto_create=True,
+            payload_codec=codec,
+        )
+
+        payload = {
+            "status": PayloadStatus.ACTIVE,
+            "meta": {"views": 10, "flags": ["a", "b"]},
+            "created_at": datetime(2026, 2, 24, 12, 0, 0),
+            "created_on": date(2026, 2, 24),
+            "alarm_at": time(9, 30, 0),
+            "price": Decimal("10.50"),
+            "owner_id": UUID("11111111-1111-1111-1111-111111111111"),
+            "coords": (1, 2, 3),
+            "labels": {"x", "y"},
+            "raw": b"\x01\x02",
+        }
+
+        repo.upsert([VectorRecord("r1", [1, 0], payload)])
+
+        # Raw store payload should be codec-serialized.
+        raw = store.fetch("json_codec", ids=["r1"])[0]
+        self.assertIsInstance(raw.payload["status"], str)
+        self.assertTrue(raw.payload["status"].startswith(codec.prefix))
+        self.assertIsInstance(raw.payload["meta"], str)
+        self.assertTrue(raw.payload["meta"].startswith(codec.prefix))
+
+        # Repository read should decode back to Python values.
+        loaded = repo.fetch(ids=["r1"])[0]
+        self.assertIsInstance(loaded.payload["status"], PayloadStatus)
+        self.assertEqual(loaded.payload["status"], PayloadStatus.ACTIVE)
+        self.assertEqual(loaded.payload["meta"], {"views": 10, "flags": ["a", "b"]})
+        self.assertEqual(loaded.payload["created_at"], datetime(2026, 2, 24, 12, 0, 0))
+        self.assertEqual(loaded.payload["created_on"], date(2026, 2, 24))
+        self.assertEqual(loaded.payload["alarm_at"], time(9, 30, 0))
+        self.assertEqual(loaded.payload["price"], Decimal("10.50"))
+        self.assertEqual(
+            loaded.payload["owner_id"],
+            UUID("11111111-1111-1111-1111-111111111111"),
+        )
+        self.assertEqual(loaded.payload["coords"], (1, 2, 3))
+        self.assertEqual(set(loaded.payload["labels"]), {"x", "y"})
+        self.assertEqual(loaded.payload["raw"], b"\x01\x02")
+
+        # Filter values are encoded with the same codec before querying backend.
+        hits = repo.query([1, 0], top_k=1, filters={"status": PayloadStatus.ACTIVE})
+        self.assertEqual([item.id for item in hits], ["r1"])
+        self.assertIsInstance(hits[0].payload["status"], PayloadStatus)
+        self.assertEqual(hits[0].payload["status"], PayloadStatus.ACTIVE)
+
+        complex_hits = repo.query([1, 0], top_k=1, filters={"meta": {"views": 10, "flags": ["a", "b"]}})
+        self.assertEqual([item.id for item in complex_hits], ["r1"])
+
+    def test_payload_codec_json_escapes_prefixed_plain_string(self) -> None:
+        codec = JsonVectorPayloadCodec()
+        prefixed = f"{codec.prefix}already-prefixed-string"
+        store = InMemoryVectorStore()
+        repo = VectorRepository(
+            store,
+            "json_codec_escape",
+            dimension=2,
+            auto_create=True,
+            payload_codec=codec,
+        )
+        repo.upsert([VectorRecord("r1", [1, 0], {"note": prefixed})])
+        loaded = repo.fetch(ids=["r1"])[0]
+        self.assertEqual(loaded.payload["note"], prefixed)
+
+    def test_payload_codec_json_rejects_unsupported_value_type(self) -> None:
+        class Unsupported:
+            pass
+
+        store = InMemoryVectorStore()
+        repo = VectorRepository(
+            store,
+            "json_codec_invalid",
+            dimension=2,
+            auto_create=True,
+            payload_codec=JsonVectorPayloadCodec(),
+        )
+        with self.assertRaisesRegex(TypeError, "cannot serialize payload value"):
+            repo.upsert([VectorRecord("r1", [1, 0], {"bad": Unsupported()})])
+
+    def test_payload_codec_json_enum_falls_back_when_type_unresolvable(self) -> None:
+        codec = JsonVectorPayloadCodec()
+        payload = {
+            "status": (
+                '__miniorm_json__:{"__miniorm_codec__":"enum",'
+                '"class":"unknown.module:MissingEnum","value":"active"}'
+            )
+        }
+        decoded = codec.deserialize(payload)
+        self.assertEqual(decoded["status"], "active")
+
+    def test_custom_payload_codec_is_used_for_payload_and_filters(self) -> None:
+        class UpperCaseCodec:
+            def serialize(self, payload):
+                if payload is None:
+                    return None
+                return {
+                    key: value.upper() if isinstance(value, str) else value
+                    for key, value in payload.items()
+                }
+
+            def deserialize(self, payload):
+                if payload is None:
+                    return None
+                return {
+                    key: value.lower() if isinstance(value, str) else value
+                    for key, value in payload.items()
+                }
+
+            def serialize_filters(self, filters):
+                if filters is None:
+                    return None
+                return {
+                    key: value.upper() if isinstance(value, str) else value
+                    for key, value in filters.items()
+                }
+
+        codec: VectorPayloadCodec = UpperCaseCodec()
+        store = InMemoryVectorStore()
+        repo = VectorRepository(
+            store,
+            "custom_codec",
+            dimension=2,
+            auto_create=True,
+            payload_codec=codec,
+        )
+        repo.upsert([VectorRecord("r1", [1, 0], {"name": "alice"})])
+
+        raw = store.fetch("custom_codec", ids=["r1"])[0]
+        self.assertEqual(raw.payload["name"], "ALICE")
+
+        loaded = repo.fetch(ids=["r1"])[0]
+        self.assertEqual(loaded.payload["name"], "alice")
+
+        hits = repo.query([1, 0], top_k=1, filters={"name": "alice"})
+        self.assertEqual([item.id for item in hits], ["r1"])
 
 
 @unittest.skipUnless(HAS_QDRANT, "qdrant_client is not installed")
