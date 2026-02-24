@@ -4,9 +4,11 @@ import importlib
 import os
 import unittest
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Optional
 
 from mini_orm import C, Database, MySQLDialect, OrderBy, Repository, apply_schema
+from tests._codec_roundtrip_mixin import CodecRoundtripMixin
 
 
 def _load_mysql_driver() -> tuple[str, Any] | tuple[None, None]:
@@ -43,6 +45,19 @@ class MySQLDialectPost:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
     author_id: Optional[int] = field(default=None, metadata={"fk": (MySQLDialectAuthor, "id")})
     title: str = ""
+
+
+class MySQLCodecStatus(str, Enum):
+    OPEN = "open"
+    CLOSED = "closed"
+
+
+@dataclass
+class MySQLCodecTicket:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    status: MySQLCodecStatus = MySQLCodecStatus.OPEN
+    payload: dict[str, Any] = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
 
 
 MySQLDialectAuthor.__relations__ = {
@@ -101,7 +116,7 @@ def _mysql_connect(
 
 
 @unittest.skipUnless(HAS_MYSQL_DRIVER, "mysql driver is not installed")
-class RepositoryMySQLDialectTests(unittest.TestCase):
+class RepositoryMySQLDialectTests(CodecRoundtripMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.host = os.getenv("MINI_ORM_MYSQL_HOST", os.getenv("MYSQL_HOST", "localhost"))
@@ -150,6 +165,9 @@ class RepositoryMySQLDialectTests(unittest.TestCase):
         cls.repo = Repository[MySQLDialectUser](cls.db, MySQLDialectUser)
         cls.author_repo = Repository[MySQLDialectAuthor](cls.db, MySQLDialectAuthor)
         cls.post_repo = Repository[MySQLDialectPost](cls.db, MySQLDialectPost)
+        cls.codec_repo = Repository[MySQLCodecTicket](cls.db, MySQLCodecTicket)
+        cls.codec_ticket_cls = MySQLCodecTicket
+        cls.codec_closed_status = MySQLCodecStatus.CLOSED
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -159,12 +177,14 @@ class RepositoryMySQLDialectTests(unittest.TestCase):
 
     def setUp(self) -> None:
         with self.db.transaction():
+            self.db.execute("DROP TABLE IF EXISTS `mysqlcodecticket`;")
             self.db.execute("DROP TABLE IF EXISTS `mysqldialectpost`;")
             self.db.execute("DROP TABLE IF EXISTS `mysqldialectauthor`;")
             self.db.execute("DROP TABLE IF EXISTS `mysqldialectuser`;")
         apply_schema(self.db, MySQLDialectUser)
         apply_schema(self.db, MySQLDialectAuthor)
         apply_schema(self.db, MySQLDialectPost)
+        apply_schema(self.db, MySQLCodecTicket)
 
     def test_insert_update_delete_roundtrip(self) -> None:
         with self.db.transaction():
@@ -234,7 +254,6 @@ class RepositoryMySQLDialectTests(unittest.TestCase):
         self.assertEqual(len(posts_with_author), 2)
         self.assertTrue(all(item.relations["author"] is not None for item in posts_with_author))
         self.assertTrue(all(item.relations["author"].name == "Reader" for item in posts_with_author))
-
 
 if __name__ == "__main__":
     unittest.main()

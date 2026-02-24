@@ -22,6 +22,7 @@ Supported metadata keys:
 - `index=True`: normal index
 - `unique_index=True`: unique index
 - `index_name="..."`: custom single-column index name
+- `codec="json"` / `codec="enum"`: explicit repository I/O codec override for field values
 - `fk=...`: foreign key reference (`"table.column"`, `(ModelOrTable, "column")`, or `{"model": Model, "column": "id"}`)
 
 Note for relation APIs (`create(..., relations=...)`, `get_related`, `list_related`):

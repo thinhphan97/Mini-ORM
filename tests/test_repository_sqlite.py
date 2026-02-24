@@ -3,7 +3,8 @@ from __future__ import annotations
 import sqlite3
 import unittest
 from dataclasses import dataclass, field
-from typing import Optional
+from enum import Enum
+from typing import Any, Optional
 
 from mini_orm import C, Database, OrderBy, Repository, SQLiteDialect, apply_schema
 from mini_orm.ports.db_api.dialects import Dialect
@@ -83,6 +84,19 @@ class MultiPkRow:
 class NonUniqueLookupRow:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
     email: str = ""
+
+
+class TicketStatus(str, Enum):
+    OPEN = "open"
+    CLOSED = "closed"
+
+
+@dataclass
+class TicketRow:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    status: TicketStatus = TicketStatus.OPEN
+    payload: dict[str, Any] = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
 
 
 class PlainModel:
@@ -238,6 +252,41 @@ class RepositorySQLiteTests(unittest.TestCase):
         self.assertEqual(self.repo.count(where=C.like("email", "%@example.com")), 3)
         self.assertTrue(self.repo.exists(where=C.eq("email", "alice@example.com")))
         self.assertFalse(self.repo.exists(where=C.eq("email", "nobody@example.com")))
+
+    def test_enum_and_json_codec_serialize_and_deserialize(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, TicketRow)
+        repo = Repository[TicketRow](db, TicketRow)
+
+        inserted = repo.insert(
+            TicketRow(
+                status=TicketStatus.CLOSED,
+                payload={"priority": 2, "tags": ["bug"]},
+                tags=["bug", "urgent"],
+            )
+        )
+        self.assertIsNotNone(inserted.id)
+
+        loaded = repo.get(inserted.id)
+        self.assertEqual(loaded.status, TicketStatus.CLOSED)
+        self.assertEqual(loaded.payload, {"priority": 2, "tags": ["bug"]})
+        self.assertEqual(loaded.tags, ["bug", "urgent"])
+
+        filtered = repo.list(where=C.eq("status", TicketStatus.CLOSED))
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0].id, inserted.id)
+
+        updated = repo.update_where(
+            {"payload": {"priority": 1}},
+            where=C.eq("status", TicketStatus.CLOSED),
+        )
+        self.assertEqual(updated, 1)
+
+        refreshed = repo.get(inserted.id)
+        self.assertEqual(refreshed.payload, {"priority": 1})
+        self.assertEqual(refreshed.tags, ["bug", "urgent"])
 
     def test_insert_many(self) -> None:
         inserted = self.repo.insert_many(

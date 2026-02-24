@@ -5,8 +5,13 @@ from __future__ import annotations
 from collections.abc import Sequence as SequenceABC
 from typing import Any, Mapping, Sequence
 
-from .conditions import C
-from .models import model_fields, row_to_model, to_dict
+from .codecs import serialize_model_value
+from .conditions import C, Condition, ConditionGroup, NotCondition
+from .models import (
+    model_fields,
+    row_to_model,
+    to_dict,
+)
 from .query_builder import append_limit_offset, compile_order_by, compile_where
 
 
@@ -143,6 +148,7 @@ def delete(repo: Any, obj: Any) -> int:
 def get(repo: Any, pk_value: Any) -> Any:
     """Fetch one row by primary key and map it to the model type."""
 
+    pk_value = serialize_model_value(repo.model, repo.meta.pk, pk_value)
     table_sql = repo.d.q(repo.meta.table)
 
     if repo.d.paramstyle == "named":
@@ -170,7 +176,7 @@ def list_rows(
 
     sql = f"SELECT * FROM {repo.d.q(repo.meta.table)}"
 
-    where_fragment = compile_where(where, repo.d)
+    where_fragment = compile_where(_encode_where_values(repo.model, where), repo.d)
     sql += where_fragment.sql
     sql += compile_order_by(order_by, repo.d)
 
@@ -190,7 +196,7 @@ def count_rows(repo: Any, *, where: Any = None) -> int:
     """Count rows matching optional conditions."""
 
     sql = f'SELECT COUNT(*) AS "__count" FROM {repo.d.q(repo.meta.table)}'
-    where_fragment = compile_where(where, repo.d)
+    where_fragment = compile_where(_encode_where_values(repo.model, where), repo.d)
     sql += where_fragment.sql
 
     row = repo.db.fetchone(sql + ";", where_fragment.params)
@@ -203,7 +209,7 @@ def exists_rows(repo: Any, *, where: Any = None) -> bool:
     """Return whether at least one row matches optional conditions."""
 
     sql = f"SELECT 1 FROM {repo.d.q(repo.meta.table)}"
-    where_fragment = compile_where(where, repo.d)
+    where_fragment = compile_where(_encode_where_values(repo.model, where), repo.d)
     sql += where_fragment.sql
     sql += " LIMIT 1"
 
@@ -235,26 +241,30 @@ def update_where(repo: Any, values: Mapping[str, Any], *, where: Any) -> int:
             f"Invalid: {invalid}"
         )
 
+    encoded_values = {
+        key: serialize_model_value(repo.model, key, value) for key, value in values.items()
+    }
+
     table_sql = repo.d.q(repo.meta.table)
-    where_fragment = compile_where(where, repo.d)
+    where_fragment = compile_where(_encode_where_values(repo.model, where), repo.d)
     if not where_fragment.sql:
         raise ValueError("where is required for update_where().")
 
     if repo.d.paramstyle == "named":
-        set_clause = ", ".join(f"{repo.d.q(key)} = :set_{key}" for key in values)
+        set_clause = ", ".join(f"{repo.d.q(key)} = :set_{key}" for key in encoded_values)
         sql = f"UPDATE {table_sql} SET {set_clause}{where_fragment.sql};"
-        params = {f"set_{key}": value for key, value in values.items()}
+        params = {f"set_{key}": value for key, value in encoded_values.items()}
         if isinstance(where_fragment.params, dict):
             params.update(where_fragment.params)
         cursor = repo.db.execute(sql, params)
         return cursor.rowcount
 
     set_clause = ", ".join(
-        f"{repo.d.q(key)} = {repo.d.placeholder(f'set_{key}')}" for key in values
+        f"{repo.d.q(key)} = {repo.d.placeholder(f'set_{key}')}" for key in encoded_values
     )
     sql = f"UPDATE {table_sql} SET {set_clause}{where_fragment.sql};"
 
-    params: list[Any] = list(values.values())
+    params: list[Any] = list(encoded_values.values())
     if isinstance(where_fragment.params, list):
         params.extend(where_fragment.params)
 
@@ -268,7 +278,7 @@ def delete_where(repo: Any, *, where: Any) -> int:
     if where is None:
         raise ValueError("where is required for delete_where().")
 
-    where_fragment = compile_where(where, repo.d)
+    where_fragment = compile_where(_encode_where_values(repo.model, where), repo.d)
     if not where_fragment.sql:
         raise ValueError("where is required for delete_where().")
 
@@ -369,3 +379,50 @@ def _is_integrity_error(repo: Any, exc: Exception) -> bool:
         return True
 
     return any(cls.__name__ == "IntegrityError" for cls in type(exc).mro())
+
+
+def _encode_where_values(model: Any, where: Any) -> Any:
+    if where is None:
+        return None
+    if isinstance(where, Condition):
+        return _encode_condition(model, where)
+    if isinstance(where, ConditionGroup):
+        return ConditionGroup(
+            operator=where.operator,
+            items=tuple(_encode_where_values(model, item) for item in where.items),
+        )
+    if isinstance(where, NotCondition):
+        return NotCondition(item=_encode_where_values(model, where.item))
+    if (
+        isinstance(where, SequenceABC)
+        and not isinstance(where, (str, bytes))
+    ):
+        return [_encode_where_values(model, item) for item in where]
+    return where
+
+
+def _encode_condition(model: Any, condition: Condition) -> Condition:
+    if condition.is_unary:
+        return condition
+    if condition.op == "IN":
+        return Condition(
+            col=condition.col,
+            op=condition.op,
+            values=[
+                serialize_model_value(model, condition.col, value)
+                for value in condition.values or []
+            ],
+            value=None,
+            is_unary=False,
+        )
+    return Condition(
+        col=condition.col,
+        op=condition.op,
+        value=serialize_model_value(
+            model,
+            condition.col,
+            condition.value,
+        ),
+        values=None,
+        is_unary=False,
+    )

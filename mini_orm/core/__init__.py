@@ -26,6 +26,11 @@ from .schema import (
 from .vector_metrics import VectorMetric, VectorMetricInput, normalize_vector_metric
 from .vector_policies import VectorIdPolicy
 from .vector_repository import VectorRepository
+from .vector_codecs import (
+    IdentityVectorPayloadCodec,
+    JsonVectorPayloadCodec,
+    VectorPayloadCodec,
+)
 from .vector_types import VectorRecord, VectorSearchResult
 
 __all__ = [
@@ -47,6 +52,9 @@ __all__ = [
     "VectorRecord",
     "VectorSearchResult",
     "VectorRepository",
+    "VectorPayloadCodec",
+    "IdentityVectorPayloadCodec",
+    "JsonVectorPayloadCodec",
     "IndexSpec",
     "apply_schema",
     "auto_pk_field",

@@ -88,6 +88,34 @@ Then use:
 
 For full options and troubleshooting, see [`docs/sql/repository.md`](sql/repository.md).
 
+## Quick codec setup (Enum/JSON)
+
+Before calling `repo.insert(...)` / `repo.list(...)`, obtain a `Repository[Article]`
+instance from your MiniORM database/session and bind it to `repo`.
+
+```python
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Optional
+
+from mini_orm import C
+
+class Status(str, Enum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+
+@dataclass
+class Article:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    status: Status = Status.DRAFT
+    payload: dict[str, Any] = field(default_factory=dict)  # auto JSON codec
+    tags: list[str] = field(default_factory=list)          # auto JSON codec
+    extra: Any = field(default_factory=dict, metadata={"codec": "json"})  # explicit codec
+
+repo.insert(Article(status=Status.PUBLISHED, payload={"views": 1}, tags=["orm"]))
+loaded = repo.list(where=C.eq("status", Status.PUBLISHED))[0]
+```
+
 ## Build documentation
 
 ```bash

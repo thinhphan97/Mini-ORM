@@ -57,6 +57,17 @@ Common repository helpers:
 - `update_where(values, where=...)`, `delete_where(where=...)`
 - `get_or_create(lookup=..., defaults=...)`
 
+## Field codec flow (Enum/JSON)
+
+Repository I/O supports automatic value conversion:
+
+- Enum fields are stored using `Enum.value` and reconstructed as Enum on read.
+- `dict`/`list` fields are stored as JSON text and reconstructed on read.
+- You can force JSON handling with `metadata={"codec": "json"}`.
+
+See runnable example:
+- `examples/sql/08_codec_serialize_deserialize.py`
+
 ## Layer boundaries
 
 - `mini_orm.core`

@@ -4,9 +4,11 @@ import importlib
 import os
 import unittest
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Optional
 
 from mini_orm import C, Database, OrderBy, PostgresDialect, Repository, apply_schema
+from tests._codec_roundtrip_mixin import CodecRoundtripMixin
 
 
 def _load_connect() -> Any:
@@ -45,6 +47,19 @@ class PgDialectPost:
     title: str = ""
 
 
+class PgCodecStatus(str, Enum):
+    OPEN = "open"
+    CLOSED = "closed"
+
+
+@dataclass
+class PgCodecTicket:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    status: PgCodecStatus = PgCodecStatus.OPEN
+    payload: dict[str, Any] = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
+
+
 PgDialectAuthor.__relations__ = {
     "posts": {
         "model": PgDialectPost,
@@ -65,7 +80,7 @@ PgDialectPost.__relations__ = {
 
 
 @unittest.skipUnless(HAS_POSTGRES_DRIVER, "psycopg/psycopg2 is not installed")
-class RepositoryPostgresDialectTests(unittest.TestCase):
+class RepositoryPostgresDialectTests(CodecRoundtripMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         password = os.getenv(
@@ -92,6 +107,9 @@ class RepositoryPostgresDialectTests(unittest.TestCase):
         cls.repo = Repository[PgDialectUser](cls.db, PgDialectUser)
         cls.author_repo = Repository[PgDialectAuthor](cls.db, PgDialectAuthor)
         cls.post_repo = Repository[PgDialectPost](cls.db, PgDialectPost)
+        cls.codec_repo = Repository[PgCodecTicket](cls.db, PgCodecTicket)
+        cls.codec_ticket_cls = PgCodecTicket
+        cls.codec_closed_status = PgCodecStatus.CLOSED
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -101,12 +119,14 @@ class RepositoryPostgresDialectTests(unittest.TestCase):
 
     def setUp(self) -> None:
         with self.db.transaction():
+            self.db.execute('DROP TABLE IF EXISTS "pgcodecticket";')
             self.db.execute('DROP TABLE IF EXISTS "pgdialectpost";')
             self.db.execute('DROP TABLE IF EXISTS "pgdialectauthor";')
             self.db.execute('DROP TABLE IF EXISTS "pgdialectuser";')
         apply_schema(self.db, PgDialectUser)
         apply_schema(self.db, PgDialectAuthor)
         apply_schema(self.db, PgDialectPost)
+        apply_schema(self.db, PgCodecTicket)
 
     def test_insert_update_delete_roundtrip(self) -> None:
         with self.db.transaction():
@@ -176,7 +196,6 @@ class RepositoryPostgresDialectTests(unittest.TestCase):
         self.assertEqual(len(posts_with_author), 2)
         self.assertTrue(all(item.relations["author"] is not None for item in posts_with_author))
         self.assertTrue(all(item.relations["author"].name == "Reader" for item in posts_with_author))
-
 
 if __name__ == "__main__":
     unittest.main()

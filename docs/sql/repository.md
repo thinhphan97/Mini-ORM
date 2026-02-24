@@ -58,6 +58,35 @@ row, created = repo.get_or_create(
 )
 ```
 
+## Field codecs (Enum/JSON)
+
+`Repository` serializes/deserializes supported field types on both input and output:
+
+- Enum field: stored as `Enum.value`, read back as Enum.
+- `dict`/`list` field: stored as JSON text, read back as Python structure.
+- Explicit codec: `metadata={"codec": "json"}`.
+
+```python
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Optional
+
+class Status(str, Enum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+
+@dataclass
+class Article:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    status: Status = Status.DRAFT
+    payload: dict[str, Any] = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
+    extra: Any = field(default_factory=dict, metadata={"codec": "json"})
+
+repo.insert(Article(status=Status.PUBLISHED, payload={"views": 1}, tags=["orm"]))
+rows = repo.list(where=C.eq("status", Status.PUBLISHED))
+```
+
 ## Get by primary key
 
 ```python
