@@ -292,17 +292,25 @@ class ModelsAndMetadataTests(unittest.TestCase):
         self.assertIn("members", inferred)
         self.assertIs(inferred["members"].model, OverrideMemberModel)
 
-        OverrideTeamModel.__relations__ = {
-            "members": {
-                "model": OverrideMemberModel,
-                "local_key": "id",
-                "remote_key": "team_id",
-                "type": "has_many",
+        orig = getattr(OverrideTeamModel, "__relations__", None)
+        try:
+            OverrideTeamModel.__relations__ = {
+                "members": {
+                    "model": OverrideMemberModel,
+                    "local_key": "id",
+                    "remote_key": "team_id",
+                    "type": "has_many",
+                }
             }
-        }
 
-        relations = model_relations(OverrideTeamModel)
-        self.assertEqual(list(relations.keys()), ["members"])
+            relations = model_relations(OverrideTeamModel)
+            self.assertEqual(list(relations.keys()), ["members"])
+        finally:
+            if orig is None:
+                if hasattr(OverrideTeamModel, "__relations__"):
+                    delattr(OverrideTeamModel, "__relations__")
+            else:
+                OverrideTeamModel.__relations__ = orig
 
     def test_model_relations_validate_model_must_be_dataclass(self) -> None:
         class NotDataclass:
