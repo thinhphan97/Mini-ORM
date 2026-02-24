@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mini-orm"
+dynamic = ["version"]
+description = "Lightweight Python ORM-style toolkit"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "thinhphan97", email = "thinhphan130997@gmail.com" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = []
+
+[project.optional-dependencies]
+qdrant = ["qdrant-client>=1.7.0,<2.0.0"]
+chroma = ["chromadb>=0.4.0,<1.0.0"]
+faiss = ["faiss-cpu>=1.7.4", "numpy>=1.24.0"]
+docs = [
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.24.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["mini_orm*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "mini_orm.__version__" }

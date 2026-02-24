@@ -28,29 +28,16 @@ class Author:
 @dataclass
 class Post:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
-    author_id: Optional[int] = field(default=None, metadata={"fk": (Author, "id")})
+    author_id: Optional[int] = field(
+        default=None,
+        metadata={
+            "fk": (Author, "id"),
+            "relation": "author",
+            "related_name": "posts",
+        },
+    )
     title: str = ""
     published: bool = False
-
-
-Author.__relations__ = {
-    "posts": {
-        "model": Post,
-        "local_key": "id",
-        "remote_key": "author_id",
-        "type": "has_many",
-    }
-}
-
-Post.__relations__ = {
-    "author": {
-        "model": Author,
-        "local_key": "author_id",
-        "remote_key": "id",
-        "type": "belongs_to",
-    }
-}
-
 
 def main() -> None:
     conn = sqlite3.connect(":memory:")

@@ -6,6 +6,8 @@ Lightweight Python ORM-style toolkit.
 
 - Dataclass-based SQL models.
 - Single-table CRUD via `Repository[T]`.
+- Model relations inferred from FK metadata (`fk`, `relation`, `related_name`) with
+  nested create and eager-loading (`get_related`, `list_related`).
 - Safe query building (`where`, `AND/OR/NOT`, `order by`, `limit`, `offset`).
 - Repository utility APIs: `count`, `exists`, `insert_many`, `update_where`, `delete_where`, `get_or_create`.
 - Schema generation from model metadata.
@@ -52,6 +54,38 @@ rows = repo.list(
 )
 total = repo.count(where=C.like("email", "%@example.com"))
 ```
+
+## Relations via metadata (quick view)
+
+```python
+from dataclasses import dataclass, field
+from typing import Optional
+
+@dataclass
+class Author:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    name: str = ""
+
+@dataclass
+class Post:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    author_id: Optional[int] = field(
+        default=None,
+        metadata={
+            "fk": (Author, "id"),
+            "relation": "author",
+            "related_name": "posts",
+        },
+    )
+    title: str = ""
+```
+
+Inferred relations:
+- `Post.author` (`belongs_to`)
+- `Author.posts` (`has_many`)
+
+Detailed guide:
+- [`docs/sql/repository.md`](sql/repository.md#relations-create-and-query) section "Relations (create and query)"
 
 ## Quick usage (Vector)
 

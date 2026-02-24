@@ -241,7 +241,17 @@ class ChromaVectorStore:
         for item in collections:
             if isinstance(item, str) and item == name:
                 return True
-            collection_name = getattr(item, "name", None)
+            if isinstance(item, Mapping):
+                collection_name = item.get("name")
+                if collection_name == name:
+                    return True
+                continue
+
+            try:
+                collection_name = item.name  # type: ignore[attr-defined]
+            except Exception:
+                collection_name = None
+
             if collection_name == name:
                 return True
         return False

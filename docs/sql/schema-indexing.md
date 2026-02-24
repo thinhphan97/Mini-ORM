@@ -24,6 +24,12 @@ Supported metadata keys:
 - `index_name="..."`: custom single-column index name
 - `fk=...`: foreign key reference (`"table.column"`, `(ModelOrTable, "column")`, or `{"model": Model, "column": "id"}`)
 
+Note for relation APIs (`create(..., relations=...)`, `get_related`, `list_related`):
+- schema generation accepts all FK formats above
+- relation inference needs a model-aware FK (`(Model, "column")` or
+  `{"model": Model, "column": "..."}`), because `"table.column"` does not include
+  a Python model class to link.
+
 ## MySQL limitation for string indexes
 
 With `MySQLDialect`, Python `str` currently maps to SQL `TEXT`.

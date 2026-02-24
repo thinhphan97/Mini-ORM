@@ -1,5 +1,7 @@
 """Mini ORM package exports."""
 
+__version__ = "0.1.0"
+
 from .core import (
     C,
     Condition,
@@ -9,6 +11,7 @@ from .core import (
     OrderBy,
     RelatedResult,
     RelationSpec,
+    RelationType,
     Repository,
     VectorIdPolicy,
     VectorMetric,
@@ -37,6 +40,7 @@ from .ports import (
 )
 
 __all__ = [
+    "__version__",
     "C",
     "Condition",
     "ConditionGroup",
@@ -44,6 +48,7 @@ __all__ = [
     "NotCondition",
     "OrderBy",
     "RelationSpec",
+    "RelationType",
     "RelatedResult",
     "VectorIdPolicy",
     "VectorMetric",
