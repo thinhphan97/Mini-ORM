@@ -6,9 +6,13 @@ Lightweight Python ORM-style toolkit
 
 - Dataclass-based SQL models.
 - Single-table CRUD via `Repository[T]`.
+- Model relations via `__relations__` (`belongs_to`, `has_many`) with:
+  - create with nested relation data (`repo.create(..., relations=...)`)
+  - eager loading (`get_related`, `list_related`)
 - Safe query building (`where`, `AND/OR/NOT`, `order by`, `limit`, `offset`).
 - Repository utility APIs: `count`, `exists`, `insert_many`, `update_where`, `delete_where`, `get_or_create`.
 - Schema generation from model metadata.
+- Foreign keys via field metadata `fk`.
 - Index support:
   - Field metadata (`index`, `unique_index`, `index_name`)
   - Multi-column indexes via `__indexes__`
@@ -75,6 +79,19 @@ hits = repo.query([0.1, 0.2, 0.25], top_k=5)
 ```bash
 python -m unittest discover -s tests -p "test_*.py"
 ```
+
+## MySQL note
+
+When using `MySQLDialect`, current type mapping treats Python `str` fields as SQL `TEXT`.
+MySQL cannot create `INDEX`/`UNIQUE` directly on `TEXT` columns without a key length,
+so schema apply may fail with errors like:
+
+`BLOB/TEXT column '...' used in key specification without a key length`
+
+To avoid this:
+
+- do not set `index=True` or `unique_index=True` on `str` fields in MySQL right now, or
+- customize your schema/type mapping to use `VARCHAR(n)` for indexed string columns.
 
 ## Documentation site (MkDocs)
 

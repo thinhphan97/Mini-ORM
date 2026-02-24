@@ -27,6 +27,11 @@ class DialectTests(unittest.TestCase):
         self.assertEqual(PostgresDialect().placeholder("x"), "%s")
         self.assertEqual(MySQLDialect().placeholder("x"), "%s")
         self.assertEqual(_QmarkDialect().placeholder("x"), "?")
+        self.assertEqual(SQLiteDialect().auto_pk_sql("id"), '"id" INTEGER PRIMARY KEY')
+        self.assertEqual(PostgresDialect().auto_pk_sql("id"), '"id" SERIAL PRIMARY KEY')
+        self.assertEqual(
+            MySQLDialect().auto_pk_sql("id"), "`id` INT AUTO_INCREMENT PRIMARY KEY"
+        )
 
     def test_invalid_paramstyle_raises(self) -> None:
         with self.assertRaises(ValueError):

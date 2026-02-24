@@ -12,6 +12,7 @@ python examples/sql/03_repository_utilities.py
 python examples/sql/04_schema_and_indexes.py
 python examples/sql/05_validation_and_error_cases.py
 python examples/sql/06_dialect_preview.py
+python examples/sql/07_relations_create_and_query.py
 
 python examples/vector/01_inmemory_basic.py
 python examples/vector/02_inmemory_metrics_and_filters.py
@@ -49,6 +50,11 @@ python examples/vector/06_faiss_example.py
 - `examples/sql/06_dialect_preview.py`
   - SQL generation differences between `SQLiteDialect`, `PostgresDialect`,
     and `MySQLDialect`.
+
+- `examples/sql/07_relations_create_and_query.py`
+  - Declare model relations with `__relations__` (`has_many`, `belongs_to`).
+  - Create parent/child graph in one call via `repo.create(..., relations=...)`.
+  - Query rows with included relations via `get_related(...)` and `list_related(...)`.
 
 ## Vector examples
 

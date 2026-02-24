@@ -7,6 +7,8 @@ from .core import (
     IndexSpec,
     NotCondition,
     OrderBy,
+    RelatedResult,
+    RelationSpec,
     Repository,
     VectorIdPolicy,
     VectorMetric,
@@ -20,6 +22,7 @@ from .core import (
     create_indexes_sql,
     create_schema_sql,
     create_table_sql,
+    model_relations,
 )
 from .ports import (
     ChromaVectorStore,
@@ -40,6 +43,8 @@ __all__ = [
     "IndexSpec",
     "NotCondition",
     "OrderBy",
+    "RelationSpec",
+    "RelatedResult",
     "VectorIdPolicy",
     "VectorMetric",
     "VectorRecord",
@@ -53,6 +58,7 @@ __all__ = [
     "create_indexes_sql",
     "create_schema_sql",
     "create_table_sql",
+    "model_relations",
     "Database",
     "Dialect",
     "SQLiteDialect",
