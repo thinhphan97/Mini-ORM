@@ -6,13 +6,22 @@
 ## Async equivalent (same method names)
 
 ```python
-await repo.insert(User(email="a@example.com", age=20))
+import asyncio
 
-user = (await repo.list(where=C.eq("email", "a@example.com")))[0]
-user.age = 21
-await repo.update(user)
+from mini_orm import C
 
-await repo.delete(user)
+
+async def main() -> None:
+    await repo.insert(User(email="a@example.com", age=20))
+
+    user = (await repo.list(where=C.eq("email", "a@example.com")))[0]
+    user.age = 21
+    await repo.update(user)
+
+    await repo.delete(user)
+
+
+asyncio.run(main())
 ```
 
 `AsyncRepository` keeps sync method names:
@@ -115,7 +124,15 @@ row = repo.get(1)
 Async:
 
 ```python
-row = await repo.get(1)
+import asyncio
+
+
+async def main() -> None:
+    row = await repo.get(1)
+    print(row)
+
+
+asyncio.run(main())
 ```
 
 ## Relations (create and query)
@@ -209,8 +226,16 @@ posts_with_author = post_repo.list_related(include=["author"])
 Async:
 
 ```python
-author_with_posts = await author_repo.get_related(1, include=["posts"])
-posts_with_author = await post_repo.list_related(include=["author"])
+import asyncio
+
+
+async def main() -> None:
+    author_with_posts = await author_repo.get_related(1, include=["posts"])
+    posts_with_author = await post_repo.list_related(include=["author"])
+    print(author_with_posts, posts_with_author)
+
+
+asyncio.run(main())
 ```
 
 ### 6) Metadata formats supported for relation inference

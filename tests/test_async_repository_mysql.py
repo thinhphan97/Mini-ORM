@@ -148,7 +148,8 @@ class AsyncRepositoryMySQLDialectTests(unittest.IsolatedAsyncioTestCase):
                 database=bootstrap_db,
             )
             cur = bootstrap_conn.cursor()
-            cur.execute(f"CREATE DATABASE IF NOT EXISTS `{cls.database}`;")
+            sanitized_db = cls.database.replace("`", "``")
+            cur.execute(f"CREATE DATABASE IF NOT EXISTS `{sanitized_db}`;")
             bootstrap_conn.commit()
             cur.close()
             bootstrap_conn.close()

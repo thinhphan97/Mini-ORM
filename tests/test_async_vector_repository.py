@@ -33,7 +33,7 @@ class PayloadStatus(str, Enum):
 def _module_available(name: str) -> bool:
     try:
         importlib.import_module(name)
-    except Exception:
+    except (ImportError, OSError):
         return False
     return True
 

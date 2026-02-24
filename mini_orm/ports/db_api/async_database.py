@@ -30,10 +30,11 @@ class AsyncDatabase:
 
         try:
             yield
-            await _maybe_await(self.conn.commit())
-        except Exception:
+        except BaseException:
             await _maybe_await(self.conn.rollback())
             raise
+        else:
+            await _maybe_await(self.conn.commit())
 
     async def execute(self, sql: str, params: QueryParams = None) -> Any:
         """Execute SQL with optional parameters and return cursor."""
@@ -44,7 +45,7 @@ class AsyncDatabase:
                 await _maybe_await(cur.execute(sql))
             else:
                 await _maybe_await(cur.execute(sql, params))
-        except Exception:
+        except BaseException:
             close = getattr(cur, "close", None)
             if callable(close):
                 await _maybe_await(close())
@@ -68,6 +69,7 @@ class AsyncDatabase:
                     "Cursor has no description; cannot map tuple rows to dict."
                 )
             cols = [d[0] for d in desc]
+            # mini_orm targets Python 3.10+, where zip(..., strict=True) is available.
             return dict(zip(cols, row, strict=True))
 
         try:
@@ -81,14 +83,24 @@ class AsyncDatabase:
         """Execute query and return one normalized row mapping."""
 
         cur = await self.execute(sql, params)
-        row = await _maybe_await(cur.fetchone())
-        if row is None:
-            return None
-        return self._row_to_mapping(cur, row)
+        try:
+            row = await _maybe_await(cur.fetchone())
+            if row is None:
+                return None
+            return self._row_to_mapping(cur, row)
+        finally:
+            close = getattr(cur, "close", None)
+            if callable(close):
+                await _maybe_await(close())
 
     async def fetchall(self, sql: str, params: QueryParams = None) -> Rows:
         """Execute query and return all rows as normalized mappings."""
 
         cur = await self.execute(sql, params)
-        rows = await _maybe_await(cur.fetchall())
-        return [self._row_to_mapping(cur, r) for r in rows]
+        try:
+            rows = await _maybe_await(cur.fetchall())
+            return [self._row_to_mapping(cur, r) for r in rows]
+        finally:
+            close = getattr(cur, "close", None)
+            if callable(close):
+                await _maybe_await(close())

@@ -114,14 +114,14 @@ class _NoReturningAsyncDb:
         rowcount = 1
         lastrowid = 77
 
-    async def execute(self, sql, params=None):  # noqa: ANN001,ANN201
-        self.executed.append((sql, params))
+    async def execute(self, _sql, _params=None):  # noqa: ANN001,ANN201
+        self.executed.append((_sql, _params))
         return self._Cursor()
 
-    async def fetchone(self, sql, params=None):  # noqa: ANN001,ANN201
+    async def fetchone(self, _sql, _params=None):  # noqa: ANN001,ANN201
         return None
 
-    async def fetchall(self, sql, params=None):  # noqa: ANN001,ANN201
+    async def fetchall(self, _sql, _params=None):  # noqa: ANN001,ANN201
         return []
 
     def transaction(self):  # pragma: no cover
@@ -566,9 +566,9 @@ class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_or_create_reraises_integrity_when_row_still_missing(self) -> None:
         async def failing_insert(obj: UserRow) -> UserRow:  # noqa: ARG001
-            raise sqlite3.IntegrityError("forced conflict")
+            raise sqlite3.IntegrityError()
 
-        async def empty_list(*args, **kwargs) -> list[UserRow]:  # noqa: ANN002, ANN003
+        async def empty_list(*_args, **_kwargs) -> list[UserRow]:  # noqa: ANN002, ANN003
             return []
 
         self.repo.insert = failing_insert  # type: ignore[method-assign]

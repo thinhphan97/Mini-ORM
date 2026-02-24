@@ -38,6 +38,8 @@ async def main() -> None:
 
         found = await repo.get(alice.id)
         print("found:", found)
+        if found is None:
+            raise RuntimeError("Inserted user was not found.")
 
         found.age = 21
         await repo.update(found)

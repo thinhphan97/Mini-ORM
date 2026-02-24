@@ -113,11 +113,15 @@ async def main() -> None:
             password=password,
             database=bootstrap_db,
         )
-        cur = bootstrap_conn.cursor()
-        cur.execute(f"CREATE DATABASE IF NOT EXISTS `{database}`;")
-        bootstrap_conn.commit()
-        cur.close()
-        bootstrap_conn.close()
+        cur = None
+        try:
+            cur = bootstrap_conn.cursor()
+            cur.execute(f"CREATE DATABASE IF NOT EXISTS `{database}`;")
+            bootstrap_conn.commit()
+        finally:
+            if cur is not None:
+                cur.close()
+            bootstrap_conn.close()
 
         conn = _mysql_connect(
             driver_name=driver_name,  # type: ignore[arg-type]

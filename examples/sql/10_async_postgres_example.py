@@ -70,6 +70,8 @@ async def main() -> None:
         print("Postgres async example skipped:", exc)
         return
 
+    # This wraps a synchronous psycopg/psycopg2 connection in AsyncDatabase.
+    # For true async network I/O with psycopg3, use psycopg.AsyncConnection.connect(...).
     db = AsyncDatabase(conn, PostgresDialect())
     repo = AsyncRepository[User](db, User)
 

@@ -7,6 +7,7 @@ from typing import Any
 
 
 async def _maybe_await(value: Any) -> Any:
+    """Await awaitables and return non-awaitable values unchanged."""
     if inspect.isawaitable(value):
         return await value
     return value
