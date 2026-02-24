@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import AbstractContextManager
+from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from typing import Any, List, Mapping, Optional, Protocol, Sequence
 
 from .types import MaybeRow, QueryParams, RowMapping
@@ -42,6 +42,20 @@ class DatabasePort(Protocol):
     def fetchall(self, sql: str, params: QueryParams = None) -> List[RowMapping]: ...
 
 
+class AsyncDatabasePort(Protocol):
+    """Async database adapter behavior required by the async repository."""
+
+    dialect: DialectPort
+
+    def transaction(self) -> AbstractAsyncContextManager[None]: ...
+
+    async def execute(self, sql: str, params: QueryParams = None) -> Any: ...
+
+    async def fetchone(self, sql: str, params: QueryParams = None) -> MaybeRow: ...
+
+    async def fetchall(self, sql: str, params: QueryParams = None) -> List[RowMapping]: ...
+
+
 class VectorStorePort(Protocol):
     """Vector database behavior required by `VectorRepository`."""
 
@@ -73,3 +87,36 @@ class VectorStorePort(Protocol):
     ) -> List[VectorRecord]: ...
 
     def delete(self, collection: str, ids: Sequence[str]) -> int: ...
+
+
+class AsyncVectorStorePort(Protocol):
+    """Async vector database behavior required by `AsyncVectorRepository`."""
+
+    supports_filters: bool
+    id_policy: VectorIdPolicy
+
+    async def create_collection(
+        self,
+        name: str,
+        dimension: int,
+        metric: VectorMetricInput = VectorMetric.COSINE,
+        *,
+        overwrite: bool = False,
+    ) -> None: ...
+
+    async def upsert(self, collection: str, records: Sequence[VectorRecord]) -> None: ...
+
+    async def query(
+        self,
+        collection: str,
+        vector: Sequence[float],
+        *,
+        top_k: int = 10,
+        filters: Optional[Mapping[str, Any]] = None,
+    ) -> List[VectorSearchResult]: ...
+
+    async def fetch(
+        self, collection: str, ids: Optional[Sequence[str]] = None
+    ) -> List[VectorRecord]: ...
+
+    async def delete(self, collection: str, ids: Sequence[str]) -> int: ...

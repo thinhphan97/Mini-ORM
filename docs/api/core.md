@@ -28,6 +28,10 @@
 
 ::: mini_orm.core.repository
 
+## `mini_orm.core.repository_async`
+
+::: mini_orm.core.repository_async
+
 ## `mini_orm.core.vector_types`
 
 ::: mini_orm.core.vector_types
@@ -39,3 +43,7 @@
 ## `mini_orm.core.vector_repository`
 
 ::: mini_orm.core.vector_repository
+
+## `mini_orm.core.vector_repository_async`
+
+::: mini_orm.core.vector_repository_async

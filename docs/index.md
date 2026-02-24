@@ -6,6 +6,7 @@ Lightweight Python ORM-style toolkit.
 
 - Dataclass-based SQL models.
 - Single-table CRUD via `Repository[T]`.
+- Async SQL flow via `AsyncRepository[T]` and `AsyncDatabase`.
 - Model relations inferred from FK metadata (`fk`, `relation`, `related_name`) with
   nested create and eager-loading (`get_related`, `list_related`).
 - Safe query building (`where`, `AND/OR/NOT`, `order by`, `limit`, `offset`).
@@ -18,9 +19,10 @@ Lightweight Python ORM-style toolkit.
   - Field metadata (`index`, `unique_index`, `index_name`)
   - Multi-column indexes via `__indexes__`
   - One-call schema apply with `apply_schema(...)`
+  - Async schema apply with `apply_schema_async(...)`
   - Idempotent mode with `if_not_exists=True`
 - SQL dialect adapters: SQLite, Postgres, MySQL.
-- Vector abstraction via `VectorRepository`:
+- Vector abstraction via `VectorRepository` / `AsyncVectorRepository`:
   - `InMemoryVectorStore` (built-in)
   - `QdrantVectorStore` (optional, requires `qdrant-client`)
   - `ChromaVectorStore` (optional, requires `chromadb`)
@@ -58,6 +60,34 @@ rows = repo.list(
     limit=10,
 )
 total = repo.count(where=C.like("email", "%@example.com"))
+```
+
+## Quick usage (Async SQL)
+
+```python
+import asyncio
+import sqlite3
+from dataclasses import dataclass, field
+from typing import Optional
+
+from mini_orm import AsyncDatabase, AsyncRepository, SQLiteDialect, apply_schema_async
+
+@dataclass
+class User:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = field(default="", metadata={"index": True})
+
+async def main() -> None:
+    conn = sqlite3.connect(":memory:")
+    db = AsyncDatabase(conn, SQLiteDialect())
+    await apply_schema_async(db, User)
+    repo = AsyncRepository[User](db, User)
+    await repo.insert(User(email="alice@example.com"))
+    rows = await repo.list()
+    print(rows)
+    conn.close()
+
+asyncio.run(main())
 ```
 
 ## Relations via metadata (quick view)
@@ -101,6 +131,22 @@ store = InMemoryVectorStore()
 repo = VectorRepository(store, "items", dimension=3, metric=VectorMetric.COSINE)
 repo.upsert([VectorRecord(id="1", vector=[0.1, 0.2, 0.3])])
 hits = repo.query([0.1, 0.2, 0.25], top_k=5)
+```
+
+## Quick usage (Async Vector)
+
+```python
+import asyncio
+from mini_orm import AsyncVectorRepository, InMemoryVectorStore, VectorRecord
+
+async def main() -> None:
+    store = InMemoryVectorStore()
+    repo = AsyncVectorRepository(store, "items", dimension=3)
+    await repo.upsert([VectorRecord(id="1", vector=[0.1, 0.2, 0.3])])
+    hits = await repo.query([0.1, 0.2, 0.25], top_k=5)
+    print(hits)
+
+asyncio.run(main())
 ```
 
 ## Run tests

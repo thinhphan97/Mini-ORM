@@ -7,6 +7,14 @@
 3. Apply schema (`apply_schema`).
 4. Use `Repository[T]` for CRUD and filtering.
 
+## Async flow (same method names)
+
+1. Define a dataclass model.
+2. Create an `AsyncDatabase` adapter with a SQL dialect.
+3. Apply schema (`await apply_schema_async(...)`).
+4. Use `AsyncRepository[T]` with the same method names as sync
+   (`insert`, `get`, `list`, `update`, `delete`, ...), but with `await`.
+
 ## Relations via metadata
 
 `Repository` relation APIs support `belongs_to` and `has_many`.
@@ -43,6 +51,11 @@ Use with:
 - `repo.get_related(pk, include=[...])`
 - `repo.list_related(include=[...])`
 
+The same relation APIs are available in async form:
+- `await repo.create(..., relations=...)`
+- `await repo.get_related(pk, include=[...])`
+- `await repo.list_related(include=[...])`
+
 Default names when omitted:
 - `author_id` -> `author`
 - child model `Post` -> `posts`
@@ -56,6 +69,8 @@ Common repository helpers:
 - `insert_many(...)`
 - `update_where(values, where=...)`, `delete_where(where=...)`
 - `get_or_create(lookup=..., defaults=...)`
+
+Async repository provides the same helper names with `await`.
 
 ## Field codec flow (Enum/JSON)
 
@@ -71,9 +86,9 @@ See runnable example:
 ## Layer boundaries
 
 - `mini_orm.core`
-  - Conditions, query builder, metadata, repository, schema.
+  - Conditions, query builder, metadata, repository, async repository, schema.
 - `mini_orm.ports.db_api`
-  - `Database` adapter and dialect implementations.
+  - `Database` / `AsyncDatabase` adapters and dialect implementations.
 
 This separation keeps SQL generation logic backend-agnostic and lets you replace adapters without changing core behavior.
 

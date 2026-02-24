@@ -15,9 +15,12 @@ from .models import (
 )
 from .query_builder import WhereInput
 from .repository import RelatedResult, Repository
+from .repository_async import AsyncRepository
+from .repository_relations_async import AsyncRelatedResult
 from .schema import (
     IndexSpec,
     apply_schema,
+    apply_schema_async,
     create_index_sql,
     create_indexes_sql,
     create_schema_sql,
@@ -26,6 +29,7 @@ from .schema import (
 from .vector_metrics import VectorMetric, VectorMetricInput, normalize_vector_metric
 from .vector_policies import VectorIdPolicy
 from .vector_repository import VectorRepository
+from .vector_repository_async import AsyncVectorRepository
 from .vector_codecs import (
     IdentityVectorPayloadCodec,
     JsonVectorPayloadCodec,
@@ -45,18 +49,22 @@ __all__ = [
     "RelationSpec",
     "RelationType",
     "Repository",
+    "AsyncRepository",
     "RelatedResult",
+    "AsyncRelatedResult",
     "VectorMetric",
     "VectorMetricInput",
     "VectorIdPolicy",
     "VectorRecord",
     "VectorSearchResult",
     "VectorRepository",
+    "AsyncVectorRepository",
     "VectorPayloadCodec",
     "IdentityVectorPayloadCodec",
     "JsonVectorPayloadCodec",
     "IndexSpec",
     "apply_schema",
+    "apply_schema_async",
     "auto_pk_field",
     "create_index_sql",
     "create_indexes_sql",
