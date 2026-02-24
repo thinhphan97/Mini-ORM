@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from mini_orm import C, Database, OrderBy, PostgresDialect, Repository, apply_schema
+from tests._codec_roundtrip_mixin import CodecRoundtripMixin
 
 
 def _load_connect() -> Any:
@@ -79,7 +80,7 @@ PgDialectPost.__relations__ = {
 
 
 @unittest.skipUnless(HAS_POSTGRES_DRIVER, "psycopg/psycopg2 is not installed")
-class RepositoryPostgresDialectTests(unittest.TestCase):
+class RepositoryPostgresDialectTests(CodecRoundtripMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         password = os.getenv(
@@ -107,6 +108,8 @@ class RepositoryPostgresDialectTests(unittest.TestCase):
         cls.author_repo = Repository[PgDialectAuthor](cls.db, PgDialectAuthor)
         cls.post_repo = Repository[PgDialectPost](cls.db, PgDialectPost)
         cls.codec_repo = Repository[PgCodecTicket](cls.db, PgCodecTicket)
+        cls.codec_ticket_cls = PgCodecTicket
+        cls.codec_closed_status = PgCodecStatus.CLOSED
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -193,39 +196,6 @@ class RepositoryPostgresDialectTests(unittest.TestCase):
         self.assertEqual(len(posts_with_author), 2)
         self.assertTrue(all(item.relations["author"] is not None for item in posts_with_author))
         self.assertTrue(all(item.relations["author"].name == "Reader" for item in posts_with_author))
-
-    def test_enum_and_json_codec_roundtrip(self) -> None:
-        with self.db.transaction():
-            ticket = self.codec_repo.insert(
-                PgCodecTicket(
-                    status=PgCodecStatus.CLOSED,
-                    payload={"priority": 2, "tags": ["bug"]},
-                    tags=["bug", "urgent"],
-                )
-            )
-
-        self.assertIsNotNone(ticket.id)
-
-        loaded = self.codec_repo.get(ticket.id)
-        self.assertIsNotNone(loaded)
-        self.assertEqual(loaded.status, PgCodecStatus.CLOSED)
-        self.assertEqual(loaded.payload, {"priority": 2, "tags": ["bug"]})
-        self.assertEqual(loaded.tags, ["bug", "urgent"])
-
-        rows = self.codec_repo.list(where=C.eq("status", PgCodecStatus.CLOSED))
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].id, ticket.id)
-
-        with self.db.transaction():
-            updated = self.codec_repo.update_where(
-                {"payload": {"priority": 1}},
-                where=C.eq("status", PgCodecStatus.CLOSED),
-            )
-        self.assertEqual(updated, 1)
-        refreshed = self.codec_repo.get(ticket.id)
-        self.assertEqual(refreshed.payload, {"priority": 1})
-        self.assertEqual(refreshed.tags, ["bug", "urgent"])
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -156,7 +156,12 @@ class JsonVectorPayloadCodec:
                 "items": [self._to_jsonable(item) for item in value],
             }
         if isinstance(value, Mapping):
-            return {str(key): self._to_jsonable(item) for key, item in value.items()}
+            return {
+                _TYPE_KEY: "dict",
+                "items": {
+                    str(key): self._to_jsonable(item) for key, item in value.items()
+                },
+            }
         if isinstance(value, list):
             return [self._to_jsonable(item) for item in value]
 
@@ -193,6 +198,11 @@ class JsonVectorPayloadCodec:
         if codec_type == "set" and set(value) == {_TYPE_KEY, "items"}:
             items = value.get("items", [])
             return {self._from_jsonable(item) for item in items}
+        if codec_type == "dict" and set(value) == {_TYPE_KEY, "items"}:
+            items = value.get("items", {})
+            if not isinstance(items, dict):
+                return {}
+            return {str(key): self._from_jsonable(item) for key, item in items.items()}
         if codec_type == "enum" and set(value) == {_TYPE_KEY, "class", "value"}:
             restored_value = self._from_jsonable(value.get("value"))
             enum_cls = _resolve_enum_type(str(value.get("class", "")))

@@ -30,7 +30,7 @@ class Article:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
     title: str = ""
     status: ArticleStatus = ArticleStatus.DRAFT
-    metadata: dict[str, Any] = field(default_factory=dict)
+    meta: dict[str, Any] = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
     extra: Any = field(default_factory=dict, metadata={"codec": "json"})
 
@@ -48,7 +48,7 @@ def main() -> None:
             Article(
                 title="Codec demo",
                 status=ArticleStatus.PUBLISHED,
-                metadata={"views": 100, "featured": True},
+                meta={"views": 100, "featured": True},
                 tags=["orm", "codec"],
                 extra={"author": {"name": "Alice"}},
             )
@@ -57,7 +57,7 @@ def main() -> None:
 
         # Raw DB values after serialize phase.
         raw = conn.execute(
-            'SELECT "status", "metadata", "tags", "extra" FROM "article" WHERE "id" = ?;',
+            'SELECT "status", "meta", "tags", "extra" FROM "article" WHERE "id" = ?;',
             (inserted.id,),
         ).fetchone()
         print("Raw DB row (serialized):", raw)
@@ -68,7 +68,7 @@ def main() -> None:
         print(
             "Loaded value types:",
             type(loaded.status).__name__,
-            type(loaded.metadata).__name__,
+            type(loaded.meta).__name__,
             type(loaded.tags).__name__,
             type(loaded.extra).__name__,
         )
@@ -79,7 +79,7 @@ def main() -> None:
 
         # Update input with JSON payload; read back as Python dict.
         repo.update_where(
-            {"metadata": {"views": 101, "featured": False}},
+            {"meta": {"views": 101, "featured": False}},
             where=C.eq("status", ArticleStatus.PUBLISHED),
         )
         print("After update_where:", repo.get(inserted.id))

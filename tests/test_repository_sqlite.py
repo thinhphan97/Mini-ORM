@@ -255,6 +255,7 @@ class RepositorySQLiteTests(unittest.TestCase):
 
     def test_enum_and_json_codec_serialize_and_deserialize(self) -> None:
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         db = Database(conn, SQLiteDialect())
         apply_schema(db, TicketRow)
         repo = Repository[TicketRow](db, TicketRow)
@@ -286,7 +287,6 @@ class RepositorySQLiteTests(unittest.TestCase):
         refreshed = repo.get(inserted.id)
         self.assertEqual(refreshed.payload, {"priority": 1})
         self.assertEqual(refreshed.tags, ["bug", "urgent"])
-        conn.close()
 
     def test_insert_many(self) -> None:
         inserted = self.repo.insert_many(
