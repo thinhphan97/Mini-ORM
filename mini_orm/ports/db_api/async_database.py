@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import contextlib
-import inspect
 from typing import Any, Mapping
 
+from ...core._async_utils import _maybe_await
 from ...core.types import MaybeRow, QueryParams, RowMapping, Rows
 from .dialects import Dialect
 
@@ -62,13 +62,11 @@ class AsyncDatabase:
                     "Cursor has no description; cannot map tuple rows to dict."
                 )
             cols = [d[0] for d in desc]
-            return dict(zip(cols, row))
+            return dict(zip(cols, row, strict=True))
 
         try:
-            m = dict(row)
-            if m:
-                return m
-        except Exception:
+            return dict(row)
+        except (TypeError, ValueError):
             pass
 
         raise TypeError(f"Unsupported row type: {type(row)}")
@@ -88,9 +86,3 @@ class AsyncDatabase:
         cur = await self.execute(sql, params)
         rows = await _maybe_await(cur.fetchall())
         return [self._row_to_mapping(cur, r) for r in rows]
-
-
-async def _maybe_await(value: Any) -> Any:
-    if inspect.isawaitable(value):
-        return await value
-    return value

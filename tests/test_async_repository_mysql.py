@@ -163,7 +163,7 @@ class AsyncRepositoryMySQLDialectTests(unittest.IsolatedAsyncioTestCase):
             )
         except Exception as exc:
             raise unittest.SkipTest(
-                "MySQL is not reachable at localhost:3306 "
+                f"MySQL is not reachable at {cls.host}:{cls.port} "
                 f"with configured credentials: {exc}"
             ) from exc
 

@@ -24,7 +24,6 @@ Lightweight Python ORM-style toolkit
 - SQL dialect adapters: SQLite, Postgres, MySQL (DB-API style).
 - Async SQL APIs with same repository method names:
   - `AsyncDatabase`, `AsyncRepository[T]`, `apply_schema_async(...)`
-- Vector abstraction via `VectorRepository`:
 - Async vector APIs with same repository method names:
   - `AsyncVectorRepository`
 - Vector abstraction via `VectorRepository`:

@@ -33,19 +33,25 @@ results = repo.query([0.1, 0.2, 0.25], top_k=2)
 ## Async usage (same method names)
 
 ```python
+import asyncio
+
 from mini_orm import AsyncVectorRepository, InMemoryVectorStore, VectorRecord
 
-store = InMemoryVectorStore()
-repo = AsyncVectorRepository(store, "users", dimension=3, metric="cosine")
+async def main() -> None:
+    store = InMemoryVectorStore()
+    repo = AsyncVectorRepository(store, "users", dimension=3, metric="cosine")
 
-await repo.upsert(
-    [
-        VectorRecord(id="u1", vector=[0.1, 0.2, 0.3], payload={"name": "alice"}),
-        VectorRecord(id="u2", vector=[0.2, 0.1, 0.5], payload={"name": "bob"}),
-    ]
-)
+    await repo.upsert(
+        [
+            VectorRecord(id="u1", vector=[0.1, 0.2, 0.3], payload={"name": "alice"}),
+            VectorRecord(id="u2", vector=[0.2, 0.1, 0.5], payload={"name": "bob"}),
+        ]
+    )
 
-results = await repo.query([0.1, 0.2, 0.25], top_k=2)
+    results = await repo.query([0.1, 0.2, 0.25], top_k=2)
+    print(results)
+
+asyncio.run(main())
 ```
 
 `AsyncVectorRepository` keeps sync method names:
@@ -81,7 +87,29 @@ hits = repo.query([1, 0], filters={"status": Status.ACTIVE})
 Async equivalent:
 
 ```python
-hits = await repo.query([1, 0], filters={"status": Status.ACTIVE})
+import asyncio
+from enum import Enum
+
+from mini_orm import AsyncVectorRepository, InMemoryVectorStore, JsonVectorPayloadCodec, VectorRecord
+
+class Status(str, Enum):
+    ACTIVE = "active"
+
+async def main() -> None:
+    store = InMemoryVectorStore()
+    repo = AsyncVectorRepository(
+        store,
+        "users",
+        dimension=2,
+        payload_codec=JsonVectorPayloadCodec(),
+    )
+    await repo.upsert(
+        [VectorRecord(id="u1", vector=[1, 0], payload={"status": Status.ACTIVE})]
+    )
+    hits = await repo.query([1, 0], filters={"status": Status.ACTIVE})
+    print(hits)
+
+asyncio.run(main())
 ```
 
 Notes:

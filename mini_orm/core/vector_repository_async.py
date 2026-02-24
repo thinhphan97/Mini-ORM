@@ -6,6 +6,7 @@ import inspect
 from typing import Any, Mapping, Optional, Sequence
 from uuid import UUID
 
+from ._async_utils import _maybe_await
 from .contracts import AsyncVectorStorePort, VectorStorePort
 from .vector_codecs import IdentityVectorPayloadCodec, VectorPayloadCodec
 from .vector_metrics import VectorMetric, VectorMetricInput, normalize_vector_metric
@@ -165,9 +166,3 @@ class AsyncVectorRepository:
                 f"{type(self.store).__name__} requires UUID string ids. "
                 f"Invalid id: {value!r}"
             ) from exc
-
-
-async def _maybe_await(value: Any) -> Any:
-    if inspect.isawaitable(value):
-        return await value
-    return value

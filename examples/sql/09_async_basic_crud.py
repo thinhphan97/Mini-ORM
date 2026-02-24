@@ -27,30 +27,31 @@ class User:
 
 async def main() -> None:
     conn = sqlite3.connect(":memory:")
-    db = AsyncDatabase(conn, SQLiteDialect())
-    await apply_schema_async(db, User)
+    try:
+        db = AsyncDatabase(conn, SQLiteDialect())
+        await apply_schema_async(db, User)
 
-    repo = AsyncRepository[User](db, User)
+        repo = AsyncRepository[User](db, User)
 
-    alice = await repo.insert(User(email="alice@example.com", age=20))
-    print("inserted:", alice)
+        alice = await repo.insert(User(email="alice@example.com", age=20))
+        print("inserted:", alice)
 
-    found = await repo.get(alice.id)
-    print("found:", found)
+        found = await repo.get(alice.id)
+        print("found:", found)
 
-    found.age = 21
-    await repo.update(found)
-    print("after update:", await repo.get(found.id))
+        found.age = 21
+        await repo.update(found)
+        print("after update:", await repo.get(found.id))
 
-    rows = await repo.list(
-        where=C.like("email", "%@example.com"),
-    )
-    print("rows:", rows)
+        rows = await repo.list(
+            where=C.like("email", "%@example.com"),
+        )
+        print("rows:", rows)
 
-    await repo.delete(found)
-    print("count after delete:", await repo.count())
-
-    conn.close()
+        await repo.delete(found)
+        print("count after delete:", await repo.count())
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":
