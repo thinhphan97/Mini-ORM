@@ -53,6 +53,41 @@ repo.insert(User(email="alice@example.com"))
 rows = repo.list(where=C.eq("email", "alice@example.com"))
 ```
 
+## Quick relation setup (metadata-based)
+
+```python
+from dataclasses import dataclass, field
+from typing import Optional
+
+@dataclass
+class Author:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    name: str = ""
+
+@dataclass
+class Post:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    author_id: Optional[int] = field(
+        default=None,
+        metadata={
+            "fk": (Author, "id"),
+            "relation": "author",     # optional
+            "related_name": "posts",  # optional
+        },
+    )
+    title: str = ""
+```
+
+From this metadata, mini_orm infers:
+- `Post.author` (`belongs_to`)
+- `Author.posts` (`has_many`)
+
+Then use:
+- `repo.create(..., relations=...)` for nested create
+- `repo.get_related(...)` / `repo.list_related(...)` for eager loading
+
+For full options and troubleshooting, see `docs/sql/repository.md`.
+
 ## Build documentation
 
 ```bash

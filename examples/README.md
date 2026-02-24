@@ -52,7 +52,12 @@ python examples/vector/06_faiss_example.py
     and `MySQLDialect`.
 
 - `examples/sql/07_relations_create_and_query.py`
-  - Declare relation intent on FK metadata (`relation`, `related_name`).
+  - Declare relation intent on FK metadata:
+    - minimum: `metadata={"fk": (Author, "id")}`
+    - optional naming: `relation="author"`, `related_name="posts"`
+  - Demonstrates inferred relations:
+    - child side `Post.author` (`belongs_to`)
+    - parent side `Author.posts` (`has_many`)
   - Create parent/child graph in one call via `repo.create(..., relations=...)`.
   - Query rows with included relations via `get_related(...)` and `list_related(...)`.
 
