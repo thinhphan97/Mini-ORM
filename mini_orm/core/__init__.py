@@ -4,6 +4,7 @@ from .conditions import C, Condition, ConditionGroup, NotCondition, OrderBy, Whe
 from .models import (
     DataclassModel,
     RelationSpec,
+    RelationType,
     auto_pk_field,
     model_fields,
     model_relations,
@@ -37,6 +38,7 @@ __all__ = [
     "WhereInput",
     "DataclassModel",
     "RelationSpec",
+    "RelationType",
     "Repository",
     "RelatedResult",
     "VectorMetric",

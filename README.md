@@ -6,7 +6,7 @@ Lightweight Python ORM-style toolkit
 
 - Dataclass-based SQL models.
 - Single-table CRUD via `Repository[T]`.
-- Model relations via `__relations__` (`belongs_to`, `has_many`) with:
+- Model relations inferred from `fk` metadata (or explicit `__relations__` override) with:
   - create with nested relation data (`repo.create(..., relations=...)`)
   - eager loading (`get_related`, `list_related`)
 - Safe query building (`where`, `AND/OR/NOT`, `order by`, `limit`, `offset`).
@@ -62,6 +62,61 @@ rows = repo.list(
 )
 total = repo.count(where=C.like("email", "%@example.com"))
 ```
+
+## Relations via metadata
+
+Declare FK metadata on child model and let mini_orm infer both relation sides.
+
+```python
+from dataclasses import dataclass, field
+from typing import Optional
+
+@dataclass
+class Author:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    name: str = ""
+
+@dataclass
+class Post:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    author_id: Optional[int] = field(
+        default=None,
+        metadata={
+            "fk": (Author, "id"),
+            "relation": "author",      # optional: belongs_to name on Post
+            "related_name": "posts",   # optional: has_many name on Author
+        },
+    )
+    title: str = ""
+```
+
+This infers:
+- `Post.author` (`belongs_to`)
+- `Author.posts` (`has_many`)
+
+Use with repository APIs:
+
+```python
+author_repo.create(
+    Author(name="alice"),
+    relations={"posts": [Post(title="p1"), Post(title="p2")]},
+)
+
+post_repo.create(
+    Post(title="hello"),
+    relations={"author": Author(name="bob")},
+)
+
+author_with_posts = author_repo.get_related(1, include=["posts"])
+posts_with_author = post_repo.list_related(include=["author"])
+```
+
+If you need manual control, explicit `__relations__` declarations are still supported
+and will override equivalent inferred specs.
+This is recommended when related models are defined across different modules and
+you need deterministic reverse `has_many` discovery.
+
+See full relation guide: `docs/sql/repository.md`.
 
 ## Quick usage (Vector)
 

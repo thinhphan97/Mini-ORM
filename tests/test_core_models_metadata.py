@@ -6,7 +6,10 @@ from typing import Optional
 
 from mini_orm.core.metadata import build_model_metadata
 from mini_orm.core.models import (
+    _infer_has_many_relations,
+    _parse_relation_type,
     RelationSpec,
+    RelationType,
     auto_pk_field,
     model_fields,
     model_relations,
@@ -62,6 +65,41 @@ class EmployeeModel:
             "type": "belongs_to",
         }
     }
+
+
+@dataclass
+class MetaAuthor:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    name: str = ""
+
+
+@dataclass
+class MetaPost:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    author_id: Optional[int] = field(
+        default=None,
+        metadata={
+            "fk": (MetaAuthor, "id"),
+            "relation": "author",
+            "related_name": "posts",
+        },
+    )
+    title: str = ""
+
+
+@dataclass
+class OverrideTeamModel:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    name: str = ""
+
+
+@dataclass
+class OverrideMemberModel:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    team_id: Optional[int] = field(
+        default=None,
+        metadata={"fk": (OverrideTeamModel, "id"), "related_name": "members"},
+    )
 
 
 class PlainObject:
@@ -207,6 +245,72 @@ class ModelsAndMetadataTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             model_relations(InvalidRelationTypeModel)
+
+    def test_parse_relation_type_rejects_invalid_string(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            r"unsupported type 'many_to_many'",
+        ):
+            _parse_relation_type("many_to_many", relation_name="company")
+
+    def test_model_relations_accept_relation_type_enum(self) -> None:
+        @dataclass
+        class EnumRelationModel:
+            id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+            company_id: Optional[int] = None
+
+            __relations__ = {
+                "company": {
+                    "model": CompanyModel,
+                    "local_key": "company_id",
+                    "remote_key": "id",
+                    "type": RelationType.BELONGS_TO,
+                }
+            }
+
+        relations = model_relations(EnumRelationModel)
+        self.assertEqual(relations["company"].relation_type, RelationType.BELONGS_TO)
+        self.assertFalse(relations["company"].many)
+
+    def test_model_relations_are_inferred_from_fk_metadata(self) -> None:
+        post_relations = model_relations(MetaPost)
+        self.assertIn("author", post_relations)
+        self.assertFalse(post_relations["author"].many)
+        self.assertEqual(post_relations["author"].local_key, "author_id")
+        self.assertEqual(post_relations["author"].remote_key, "id")
+        self.assertIs(post_relations["author"].model, MetaAuthor)
+
+        author_relations = model_relations(MetaAuthor)
+        self.assertIn("posts", author_relations)
+        self.assertTrue(author_relations["posts"].many)
+        self.assertEqual(author_relations["posts"].local_key, "id")
+        self.assertEqual(author_relations["posts"].remote_key, "author_id")
+        self.assertIs(author_relations["posts"].model, MetaPost)
+
+    def test_explicit_relations_override_equivalent_inferred_specs(self) -> None:
+        inferred = _infer_has_many_relations(OverrideTeamModel)
+        self.assertIn("members", inferred)
+        self.assertIs(inferred["members"].model, OverrideMemberModel)
+
+        orig = getattr(OverrideTeamModel, "__relations__", None)
+        try:
+            OverrideTeamModel.__relations__ = {
+                "members": {
+                    "model": OverrideMemberModel,
+                    "local_key": "id",
+                    "remote_key": "team_id",
+                    "type": "has_many",
+                }
+            }
+
+            relations = model_relations(OverrideTeamModel)
+            self.assertEqual(list(relations.keys()), ["members"])
+        finally:
+            if orig is None:
+                if hasattr(OverrideTeamModel, "__relations__"):
+                    delattr(OverrideTeamModel, "__relations__")
+            else:
+                OverrideTeamModel.__relations__ = orig
 
     def test_model_relations_validate_model_must_be_dataclass(self) -> None:
         class NotDataclass:

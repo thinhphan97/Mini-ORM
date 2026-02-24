@@ -49,6 +49,26 @@ PostRow.__relations__ = {
 
 
 @dataclass
+class AutoAuthor:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    name: str = ""
+
+
+@dataclass
+class AutoPost:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    author_id: Optional[int] = field(
+        default=None,
+        metadata={
+            "fk": (AutoAuthor, "id"),
+            "relation": "author",
+            "related_name": "posts",
+        },
+    )
+    title: str = ""
+
+
+@dataclass
 class OnlyPkRow:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
 
@@ -504,6 +524,37 @@ class RepositorySQLiteTests(unittest.TestCase):
         rows = post_repo.list_related(include=["author", "author"])
         self.assertEqual(len(rows), 1)
         self.assertEqual(list(rows[0].relations.keys()), ["author"])
+        conn.close()
+
+    def test_relations_can_be_inferred_from_fk_metadata(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, AutoAuthor)
+        apply_schema(db, AutoPost)
+        author_repo = Repository[AutoAuthor](db, AutoAuthor)
+        post_repo = Repository[AutoPost](db, AutoPost)
+
+        author = author_repo.create(
+            AutoAuthor(name="Inferred"),
+            relations={"posts": [AutoPost(title="T1"), AutoPost(title="T2")]},
+        )
+        post_with_author = post_repo.create(
+            AutoPost(title="Nested"),
+            relations={"author": AutoAuthor(name="Nested Author")},
+        )
+
+        self.assertIsNotNone(author.id)
+        self.assertIsNotNone(post_with_author.author_id)
+        self.assertEqual(post_repo.count(), 3)
+        self.assertEqual(author_repo.count(), 2)
+
+        author_with_posts = author_repo.get_related(author.id, include=["posts"])
+        self.assertIsNotNone(author_with_posts)
+        self.assertEqual(len(author_with_posts.relations["posts"]), 2)
+
+        rows = post_repo.list_related(include=["author"], order_by=[OrderBy("id")])
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(all(item.relations["author"] is not None for item in rows))
         conn.close()
 
 
