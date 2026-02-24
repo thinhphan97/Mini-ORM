@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import unittest
 from dataclasses import dataclass, field
-from typing import Optional
+from enum import Enum
+from typing import Any, Optional
 
 from mini_orm.core.metadata import build_model_metadata
 from mini_orm.core.models import (
@@ -102,6 +104,20 @@ class OverrideMemberModel:
     )
 
 
+class ProfileStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
+@dataclass
+class CodecModel:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    status: ProfileStatus = ProfileStatus.ACTIVE
+    payload: dict[str, Any] = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
+    custom_payload: Any = field(default_factory=dict, metadata={"codec": "json"})
+
+
 class PlainObject:
     pass
 
@@ -143,6 +159,36 @@ class ModelsAndMetadataTests(unittest.TestCase):
         self.assertEqual(mapped.id, 7)
         self.assertEqual(mapped.email, "bob@example.com")
         self.assertEqual(mapped.age, 30)
+
+    def test_to_dict_and_row_to_model_support_enum_and_json_codec(self) -> None:
+        obj = CodecModel(
+            id=1,
+            status=ProfileStatus.INACTIVE,
+            payload={"score": 10},
+            tags=["orm", "codec"],
+            custom_payload={"flag": True},
+        )
+        serialized = to_dict(obj)
+
+        self.assertEqual(serialized["status"], "inactive")
+        self.assertEqual(json.loads(serialized["payload"]), {"score": 10})
+        self.assertEqual(json.loads(serialized["tags"]), ["orm", "codec"])
+        self.assertEqual(json.loads(serialized["custom_payload"]), {"flag": True})
+
+        mapped = row_to_model(
+            CodecModel,
+            {
+                "id": 2,
+                "status": "active",
+                "payload": '{"score": 20}',
+                "tags": '["db", "orm"]',
+                "custom_payload": '{"flag": false}',
+            },
+        )
+        self.assertEqual(mapped.status, ProfileStatus.ACTIVE)
+        self.assertEqual(mapped.payload, {"score": 20})
+        self.assertEqual(mapped.tags, ["db", "orm"])
+        self.assertEqual(mapped.custom_payload, {"flag": False})
 
     def test_build_model_metadata_success(self) -> None:
         metadata = build_model_metadata(UserModel)

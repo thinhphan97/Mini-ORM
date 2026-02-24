@@ -5,10 +5,21 @@ from __future__ import annotations
 import sys
 from collections.abc import Mapping, Sequence as SequenceABC
 from dataclasses import Field, dataclass
-from dataclasses import asdict, fields, is_dataclass
+from dataclasses import fields, is_dataclass
 from enum import Enum
-from typing import Any, ClassVar, Dict, List, Optional, Protocol, Type, TypeVar, cast
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    List,
+    Optional,
+    Protocol,
+    Type,
+    TypeVar,
+    cast,
+)
 
+from .codecs import deserialize_model_value, serialize_model_value
 from .types import RowMapping
 
 
@@ -123,15 +134,27 @@ def auto_pk_field(cls: Type[DataclassModel]) -> Optional[Field[Any]]:
 
 
 def to_dict(obj: DataclassModel) -> Dict[str, Any]:
-    """Convert dataclass model instance to dictionary."""
+    """Convert dataclass model instance to DB-ready dictionary."""
 
-    return asdict(obj)
+    cls = cast(Type[DataclassModel], type(obj))
+    serialized: Dict[str, Any] = {}
+    for field in model_fields(cls):
+        serialized[field.name] = serialize_model_value(
+            cls,
+            field.name,
+            getattr(obj, field.name),
+        )
+    return serialized
 
 
 def row_to_model(cls: Type[T], row: RowMapping) -> T:
     """Map one DB row mapping to a model instance."""
 
-    return cls(**dict(row))  # type: ignore[arg-type]
+    raw_row = dict(row)
+    decoded: Dict[str, Any] = {}
+    for key, value in raw_row.items():
+        decoded[key] = deserialize_model_value(cls, key, value)
+    return cls(**decoded)  # type: ignore[arg-type]
 
 
 def _parse_relation_input(name: str, raw_spec: RelationInput) -> RelationSpec:

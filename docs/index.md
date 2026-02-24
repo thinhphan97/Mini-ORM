@@ -10,6 +10,9 @@ Lightweight Python ORM-style toolkit.
   nested create and eager-loading (`get_related`, `list_related`).
 - Safe query building (`where`, `AND/OR/NOT`, `order by`, `limit`, `offset`).
 - Repository utility APIs: `count`, `exists`, `insert_many`, `update_where`, `delete_where`, `get_or_create`.
+- Field codecs for DB I/O:
+  - Enum <-> scalar (`Enum.value`)
+  - JSON <-> Python structures (`dict`/`list`, or explicit `metadata={"codec": "json"}`)
 - Schema generation from model metadata.
 - Index support:
   - Field metadata (`index`, `unique_index`, `index_name`)

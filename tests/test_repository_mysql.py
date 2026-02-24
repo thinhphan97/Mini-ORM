@@ -4,6 +4,7 @@ import importlib
 import os
 import unittest
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Optional
 
 from mini_orm import C, Database, MySQLDialect, OrderBy, Repository, apply_schema
@@ -43,6 +44,19 @@ class MySQLDialectPost:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
     author_id: Optional[int] = field(default=None, metadata={"fk": (MySQLDialectAuthor, "id")})
     title: str = ""
+
+
+class MySQLCodecStatus(str, Enum):
+    OPEN = "open"
+    CLOSED = "closed"
+
+
+@dataclass
+class MySQLCodecTicket:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    status: MySQLCodecStatus = MySQLCodecStatus.OPEN
+    payload: dict[str, Any] = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
 
 
 MySQLDialectAuthor.__relations__ = {
@@ -150,6 +164,7 @@ class RepositoryMySQLDialectTests(unittest.TestCase):
         cls.repo = Repository[MySQLDialectUser](cls.db, MySQLDialectUser)
         cls.author_repo = Repository[MySQLDialectAuthor](cls.db, MySQLDialectAuthor)
         cls.post_repo = Repository[MySQLDialectPost](cls.db, MySQLDialectPost)
+        cls.codec_repo = Repository[MySQLCodecTicket](cls.db, MySQLCodecTicket)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -159,12 +174,14 @@ class RepositoryMySQLDialectTests(unittest.TestCase):
 
     def setUp(self) -> None:
         with self.db.transaction():
+            self.db.execute("DROP TABLE IF EXISTS `mysqlcodecticket`;")
             self.db.execute("DROP TABLE IF EXISTS `mysqldialectpost`;")
             self.db.execute("DROP TABLE IF EXISTS `mysqldialectauthor`;")
             self.db.execute("DROP TABLE IF EXISTS `mysqldialectuser`;")
         apply_schema(self.db, MySQLDialectUser)
         apply_schema(self.db, MySQLDialectAuthor)
         apply_schema(self.db, MySQLDialectPost)
+        apply_schema(self.db, MySQLCodecTicket)
 
     def test_insert_update_delete_roundtrip(self) -> None:
         with self.db.transaction():
@@ -234,6 +251,38 @@ class RepositoryMySQLDialectTests(unittest.TestCase):
         self.assertEqual(len(posts_with_author), 2)
         self.assertTrue(all(item.relations["author"] is not None for item in posts_with_author))
         self.assertTrue(all(item.relations["author"].name == "Reader" for item in posts_with_author))
+
+    def test_enum_and_json_codec_roundtrip(self) -> None:
+        with self.db.transaction():
+            ticket = self.codec_repo.insert(
+                MySQLCodecTicket(
+                    status=MySQLCodecStatus.CLOSED,
+                    payload={"priority": 2, "tags": ["bug"]},
+                    tags=["bug", "urgent"],
+                )
+            )
+
+        self.assertIsNotNone(ticket.id)
+
+        loaded = self.codec_repo.get(ticket.id)
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded.status, MySQLCodecStatus.CLOSED)
+        self.assertEqual(loaded.payload, {"priority": 2, "tags": ["bug"]})
+        self.assertEqual(loaded.tags, ["bug", "urgent"])
+
+        rows = self.codec_repo.list(where=C.eq("status", MySQLCodecStatus.CLOSED))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].id, ticket.id)
+
+        with self.db.transaction():
+            updated = self.codec_repo.update_where(
+                {"payload": {"priority": 1}},
+                where=C.eq("status", MySQLCodecStatus.CLOSED),
+            )
+        self.assertEqual(updated, 1)
+        refreshed = self.codec_repo.get(ticket.id)
+        self.assertEqual(refreshed.payload, {"priority": 1})
+        self.assertEqual(refreshed.tags, ["bug", "urgent"])
 
 
 if __name__ == "__main__":

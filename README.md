@@ -11,6 +11,9 @@ Lightweight Python ORM-style toolkit
   - eager loading (`get_related`, `list_related`)
 - Safe query building (`where`, `AND/OR/NOT`, `order by`, `limit`, `offset`).
 - Repository utility APIs: `count`, `exists`, `insert_many`, `update_where`, `delete_where`, `get_or_create`.
+- Field codecs for DB I/O:
+  - Enum <-> scalar (`Enum.value`)
+  - JSON <-> Python structures (`dict`/`list`, or explicit `metadata={"codec": "json"}`)
 - Schema generation from model metadata.
 - Foreign keys via field metadata `fk`.
 - Index support:
@@ -117,6 +120,38 @@ This is recommended when related models are defined across different modules and
 you need deterministic reverse `has_many` discovery.
 
 See full relation guide: `docs/sql/repository.md`.
+
+## Field codec (Enum/JSON)
+
+`mini_orm` automatically serializes/deserializes common rich types during repository I/O.
+
+```python
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Optional
+
+class Status(str, Enum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+
+@dataclass
+class Article:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    status: Status = Status.DRAFT
+    payload: dict[str, Any] = field(default_factory=dict)  # auto JSON codec
+    tags: list[str] = field(default_factory=list)          # auto JSON codec
+    extra: Any = field(default_factory=dict, metadata={"codec": "json"})  # explicit codec
+
+row = repo.insert(Article(status=Status.PUBLISHED, payload={"views": 1}, tags=["orm"]))
+loaded = repo.get(row.id)
+
+assert loaded.status is Status.PUBLISHED
+assert loaded.payload == {"views": 1}
+assert loaded.tags == ["orm"]
+```
+
+Runnable example:
+- `examples/sql/08_codec_serialize_deserialize.py`
 
 ## Quick usage (Vector)
 
