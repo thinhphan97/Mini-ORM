@@ -80,6 +80,20 @@ hits = repo.query([0.1, 0.2, 0.25], top_k=5)
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
+## Build library
+
+```bash
+pip install -r requirements-build.txt
+./scripts/build_lib.sh
+```
+
+## Publish library
+
+```bash
+pip install -r requirements-publish.txt
+python3 -m twine upload dist/*
+```
+
 ## MySQL note
 
 When using `MySQLDialect`, current type mapping treats Python `str` fields as SQL `TEXT`.
