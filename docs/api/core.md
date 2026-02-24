@@ -8,6 +8,10 @@
 
 ::: mini_orm.core.query_builder
 
+## `mini_orm.core.codecs`
+
+::: mini_orm.core.codecs
+
 ## `mini_orm.core.models`
 
 ::: mini_orm.core.models

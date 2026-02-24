@@ -13,6 +13,7 @@ python examples/sql/04_schema_and_indexes.py
 python examples/sql/05_validation_and_error_cases.py
 python examples/sql/06_dialect_preview.py
 python examples/sql/07_relations_create_and_query.py
+python examples/sql/08_codec_serialize_deserialize.py
 
 python examples/vector/01_inmemory_basic.py
 python examples/vector/02_inmemory_metrics_and_filters.py
@@ -60,6 +61,11 @@ python examples/vector/06_faiss_example.py
     - parent side `Author.posts` (`has_many`)
   - Create parent/child graph in one call via `repo.create(..., relations=...)`.
   - Query rows with included relations via `get_related(...)` and `list_related(...)`.
+
+- `examples/sql/08_codec_serialize_deserialize.py`
+  - Enum and JSON codec flow for repository input/output.
+  - Shows raw DB serialized values and model-level deserialized values.
+  - Covers `insert`, `get`, `list(where=...)`, and `update_where`.
 
 ## Vector examples
 
