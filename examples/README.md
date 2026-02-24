@@ -21,6 +21,7 @@ python examples/vector/03_repository_lifecycle_and_errors.py
 python examples/vector/04_qdrant_example.py
 python examples/vector/05_chroma_example.py
 python examples/vector/06_faiss_example.py
+python examples/vector/07_payload_codec.py
 ```
 
 ## SQL examples
@@ -90,6 +91,11 @@ python examples/vector/06_faiss_example.py
 - `examples/vector/06_faiss_example.py`
   - Faiss usage and unsupported-filter behavior.
   - Optional dependency script.
+
+- `examples/vector/07_payload_codec.py`
+  - Optional vector payload codec (`JsonVectorPayloadCodec`).
+  - Shows raw backend payload vs decoded repository payload.
+  - Demonstrates filter queries with Enum payload values.
 
 ## Optional dependency install
 

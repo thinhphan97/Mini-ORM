@@ -32,6 +32,10 @@
 
 ::: mini_orm.core.vector_types
 
+## `mini_orm.core.vector_codecs`
+
+::: mini_orm.core.vector_codecs
+
 ## `mini_orm.core.vector_repository`
 
 ::: mini_orm.core.vector_repository

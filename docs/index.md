@@ -25,6 +25,8 @@ Lightweight Python ORM-style toolkit.
   - `QdrantVectorStore` (optional, requires `qdrant-client`)
   - `ChromaVectorStore` (optional, requires `chromadb`)
   - `FaissVectorStore` (optional, requires `faiss-cpu` and `numpy`)
+  - Optional payload codec for metadata/filter I/O
+    (`IdentityVectorPayloadCodec`, `JsonVectorPayloadCodec`)
 
 ## Quick usage (SQL)
 
