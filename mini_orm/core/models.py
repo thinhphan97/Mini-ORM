@@ -250,6 +250,13 @@ def _infer_belongs_to_relations(cls: Type[DataclassModel]) -> Dict[str, Relation
 
 
 def _infer_has_many_relations(cls: Type[DataclassModel]) -> Dict[str, RelationSpec]:
+    """Infer reverse has-many relations from dataclasses in the same module.
+
+    This intentionally scans `cls.__module__` symbols only. For cross-module
+    parent/child model graphs, declare explicit `__relations__` when you need
+    guaranteed reverse relation discovery.
+    """
+
     module = sys.modules.get(cls.__module__)
     if module is None:
         return {}

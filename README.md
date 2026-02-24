@@ -113,6 +113,8 @@ posts_with_author = post_repo.list_related(include=["author"])
 
 If you need manual control, explicit `__relations__` declarations are still supported
 and will override equivalent inferred specs.
+This is recommended when related models are defined across different modules and
+you need deterministic reverse `has_many` discovery.
 
 See full relation guide: `docs/sql/repository.md`.
 

@@ -82,7 +82,7 @@ Inferred relations:
 - `Author.posts` (`has_many`)
 
 Detailed guide:
-- `docs/sql/repository.md` section "Relations (create and query)"
+- [`docs/sql/repository.md`](sql/repository.md#relations-create-and-query) section "Relations (create and query)"
 
 ## Quick usage (Vector)
 

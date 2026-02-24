@@ -86,7 +86,7 @@ Then use:
 - `repo.create(..., relations=...)` for nested create
 - `repo.get_related(...)` / `repo.list_related(...)` for eager loading
 
-For full options and troubleshooting, see `docs/sql/repository.md`.
+For full options and troubleshooting, see [`docs/sql/repository.md`](sql/repository.md).
 
 ## Build documentation
 

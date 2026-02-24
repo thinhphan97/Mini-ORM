@@ -118,9 +118,9 @@ class Post:
 
 If you omit explicit names:
 - `relation` defaults from FK field name:
-`author_id` -> `author`
+    `author_id` -> `author`
 - `related_name` defaults from child model name pluralization:
-`Post` -> `posts`
+    `Post` -> `posts`
 
 For irregular names or multiple FKs to the same target model, set
 `relation`/`related_name` explicitly to avoid ambiguity.
@@ -166,14 +166,16 @@ relations from it.
 
 You can still define `__relations__` for full manual control.
 Explicit declarations are kept and inferred duplicates are skipped.
+This is also the recommended path when parent/child models are split across
+different modules and you need guaranteed reverse `has_many` discovery.
 
 ### 8) Common validation errors
 
 - `Unknown relation '...'` when calling `include`/`relations`:
-relation name is not inferred or declared.
+  relation name is not inferred or declared.
 - `expects a sequence` on has_many create:
-pass a list/tuple of model objects.
+  pass a list/tuple of model objects.
 - `expects <ModelName>`:
-nested relation value type does not match the target model.
+  nested relation value type does not match the target model.
 - duplicate inferred relation names:
-set `relation` and/or `related_name` to disambiguate.
+  set `relation` and/or `related_name` to disambiguate.
