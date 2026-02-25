@@ -19,7 +19,7 @@ PROJECT_ROOT = next(
 if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from mini_orm import AsyncDatabase, AsyncRepository, MySQLDialect, apply_schema_async
+from mini_orm import AsyncDatabase, AsyncRepository, MySQLDialect
 
 
 def _load_mysql_driver() -> tuple[str, Any] | tuple[None, None]:
@@ -139,12 +139,11 @@ async def main() -> None:
         return
 
     db = AsyncDatabase(conn, MySQLDialect())
-    repo = AsyncRepository[User](db, User)
+    repo = AsyncRepository[User](db, User, auto_schema=True)
 
     try:
         async with db.transaction():
             await db.execute("DROP TABLE IF EXISTS `user`;")
-        await apply_schema_async(db, User)
 
         async with db.transaction():
             alice = await repo.insert(User(email="alice@example.com", age=25))

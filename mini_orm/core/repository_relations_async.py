@@ -228,7 +228,14 @@ class AsyncRelationCoordinator(Generic[T]):
 
     def _new_repo(self, model: type[DataclassModel]) -> Any:
         repo_type = type(self.repo)
-        return repo_type(self.repo.db, model)
+        return repo_type(
+            self.repo.db,
+            model,
+            auto_schema=getattr(self.repo, "_auto_schema", False),
+            schema_conflict=getattr(self.repo, "_schema_conflict", "raise"),
+            require_registration=getattr(self.repo, "_require_registration", False),
+            registry=getattr(self.repo, "_registry", None),
+        )
 
     def _relation_spec(self, relation_name: str) -> RelationSpec:
         spec = self.repo.meta.relations.get(relation_name)

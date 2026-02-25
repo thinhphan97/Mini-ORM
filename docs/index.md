@@ -6,7 +6,11 @@ Lightweight Python ORM-style toolkit.
 
 - Dataclass-based SQL models.
 - Single-table CRUD via `Repository[T]`.
-- Async SQL flow via `AsyncRepository[T]` and `AsyncDatabase`.
+- Multi-model routing with one hub object via `UnifiedRepository`
+  (object-only mutation support included).
+- Async SQL flow via `AsyncRepository[T]`, `AsyncUnifiedRepository`, and `AsyncDatabase`.
+- Optional schema auto-sync with `auto_schema=True` and conflict policy `schema_conflict`.
+- Optional strict registration with `require_registration=True` and `register(..., ensure=...)`.
 - Model relations inferred from FK metadata (`fk`, `relation`, `related_name`) with
   nested create and eager-loading (`get_related`, `list_related`).
 - Safe query building (`where`, `AND/OR/NOT`, `order by`, `limit`, `offset`).

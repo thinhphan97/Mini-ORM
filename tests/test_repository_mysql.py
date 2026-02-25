@@ -7,7 +7,15 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
-from mini_orm import C, Database, MySQLDialect, OrderBy, Repository, apply_schema
+from mini_orm import (
+    C,
+    Database,
+    MySQLDialect,
+    OrderBy,
+    Repository,
+    UnifiedRepository,
+    apply_schema,
+)
 from tests._codec_roundtrip_mixin import CodecRoundtripMixin
 
 
@@ -58,6 +66,25 @@ class MySQLCodecTicket:
     status: MySQLCodecStatus = MySQLCodecStatus.OPEN
     payload: dict[str, Any] = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
+
+
+@dataclass
+class MySQLAutoSchemaUserV1:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
+
+
+MySQLAutoSchemaUserV1.__table__ = "mysqlautoschemauser"
+
+
+@dataclass
+class MySQLAutoSchemaUserV2:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
+    age: Optional[int] = None
+
+
+MySQLAutoSchemaUserV2.__table__ = "mysqlautoschemauser"
 
 
 MySQLDialectAuthor.__relations__ = {
@@ -181,6 +208,7 @@ class RepositoryMySQLDialectTests(CodecRoundtripMixin, unittest.TestCase):
             self.db.execute("DROP TABLE IF EXISTS `mysqldialectpost`;")
             self.db.execute("DROP TABLE IF EXISTS `mysqldialectauthor`;")
             self.db.execute("DROP TABLE IF EXISTS `mysqldialectuser`;")
+            self.db.execute("DROP TABLE IF EXISTS `mysqlautoschemauser`;")
         apply_schema(self.db, MySQLDialectUser)
         apply_schema(self.db, MySQLDialectAuthor)
         apply_schema(self.db, MySQLDialectPost)
@@ -239,6 +267,78 @@ class RepositoryMySQLDialectTests(CodecRoundtripMixin, unittest.TestCase):
         self.assertEqual(self.post_repo.count(), 2)
         loaded_posts = self.post_repo.list(order_by=[OrderBy("id")])
         self.assertTrue(all(post.author_id == author.id for post in loaded_posts))
+
+    def test_unified_repository_reuses_cached_repositories(self) -> None:
+        unified = UnifiedRepository(self.db)
+
+        user_repo_1 = unified.repo(MySQLDialectUser)
+        user_repo_2 = unified.repo(MySQLDialectUser)
+        author_repo = unified.repo(MySQLDialectAuthor)
+
+        self.assertIs(user_repo_1, user_repo_2)
+        self.assertIsNot(user_repo_1, author_repo)
+
+    def test_unified_repository_crud_and_relations(self) -> None:
+        unified = UnifiedRepository(self.db)
+
+        with self.db.transaction():
+            user = unified.insert(
+                MySQLDialectUser,
+                MySQLDialectUser(email="hub@example.com", age=20),
+            )
+        self.assertIsNotNone(user.id)
+        self.assertEqual(unified.count(MySQLDialectUser), 1)
+
+        loaded = unified.get(MySQLDialectUser, user.id)
+        self.assertIsNotNone(loaded)
+        if loaded is None:
+            self.fail("Expected inserted row to exist.")
+
+        loaded.age = 21
+        with self.db.transaction():
+            self.assertEqual(unified.update(MySQLDialectUser, loaded), 1)
+        with self.db.transaction():
+            self.assertEqual(unified.delete(MySQLDialectUser, loaded), 1)
+        self.assertEqual(unified.count(MySQLDialectUser), 0)
+
+        author = unified.create(
+            MySQLDialectAuthor,
+            MySQLDialectAuthor(name="Unified Reader"),
+            relations={"posts": [MySQLDialectPost(title="T1"), MySQLDialectPost(title="T2")]},
+        )
+        self.assertIsNotNone(author.id)
+        if author.id is None:
+            self.fail("Expected author auto PK.")
+
+        author_with_posts = unified.get_related(
+            MySQLDialectAuthor,
+            author.id,
+            include=["posts"],
+        )
+        self.assertIsNotNone(author_with_posts)
+        if author_with_posts is None:
+            self.fail("Expected related result for existing author.")
+        self.assertEqual(len(author_with_posts.relations["posts"]), 2)
+
+    def test_repository_auto_schema_additive_for_mysql(self) -> None:
+        repo_v1 = Repository(self.db, MySQLAutoSchemaUserV1, auto_schema=True)
+        with self.db.transaction():
+            repo_v1.insert(MySQLAutoSchemaUserV1(email="a@example.com"))
+
+        repo_v2 = Repository(self.db, MySQLAutoSchemaUserV2, auto_schema=True)
+        with self.db.transaction():
+            repo_v2.insert(MySQLAutoSchemaUserV2(email="b@example.com", age=20))
+        self.assertEqual(repo_v2.count(), 2)
+
+    def test_unified_repository_auto_schema_additive_for_mysql(self) -> None:
+        unified = UnifiedRepository(self.db, auto_schema=True)
+        with self.db.transaction():
+            unified.insert(MySQLAutoSchemaUserV1, MySQLAutoSchemaUserV1(email="a@example.com"))
+            unified.insert(
+                MySQLAutoSchemaUserV2,
+                MySQLAutoSchemaUserV2(email="b@example.com", age=20),
+            )
+        self.assertEqual(unified.count(MySQLAutoSchemaUserV2), 2)
 
     def test_get_related_and_list_related(self) -> None:
         author = self.author_repo.create(

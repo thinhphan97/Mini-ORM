@@ -6,6 +6,10 @@ Lightweight Python ORM-style toolkit
 
 - Dataclass-based SQL models.
 - Single-table CRUD via `Repository[T]`.
+- Multi-table routing via one hub object: `UnifiedRepository`
+  (model-class routing, with object-only mutation support).
+- Optional auto schema sync on first action (or during `register(...)`): `auto_schema=True` (with `schema_conflict` policy).
+- Optional strict table registry before actions: `require_registration=True` + `register(...)`.
 - Model relations inferred from `fk` metadata (or explicit `__relations__` override) with:
   - create with nested relation data (`repo.create(..., relations=...)`)
   - eager loading (`get_related`, `list_related`)
@@ -23,7 +27,7 @@ Lightweight Python ORM-style toolkit
   - Idempotent mode with `if_not_exists=True`
 - SQL dialect adapters: SQLite, Postgres, MySQL (DB-API style).
 - Async SQL APIs with same repository method names:
-  - `AsyncDatabase`, `AsyncRepository[T]`, `apply_schema_async(...)`
+  - `AsyncDatabase`, `AsyncRepository[T]`, `AsyncUnifiedRepository`, `apply_schema_async(...)`
 - Async vector APIs with same repository method names:
   - `AsyncVectorRepository`
 - Vector abstraction via `VectorRepository`:
@@ -48,7 +52,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 import sqlite3
 
-from mini_orm import Database, SQLiteDialect, Repository, C, apply_schema
+from mini_orm import C, Database, Repository, SQLiteDialect
 
 @dataclass
 class User:
@@ -57,9 +61,7 @@ class User:
 
 conn = sqlite3.connect(":memory:")
 db = Database(conn, SQLiteDialect())
-repo = Repository[User](db, User)
-
-apply_schema(db, User)
+repo = Repository[User](db, User, auto_schema=True)
 repo.insert(User(email="alice@example.com"))
 rows = repo.list(where=C.eq("email", "alice@example.com"))
 
@@ -72,6 +74,52 @@ rows = repo.list(
 )
 total = repo.count(where=C.like("email", "%@example.com"))
 ```
+
+## Quick usage (Unified SQL hub)
+
+```python
+from mini_orm import UnifiedRepository
+
+hub = UnifiedRepository(db, auto_schema=True, require_registration=True)
+hub.register_many([User])
+hub.insert(User(email="alice@example.com"))  # model inferred from object
+rows = hub.list(User)
+```
+
+## SQL Repository Args (Sync + Async)
+
+`Repository[T]` / `AsyncRepository[T]` constructor:
+
+- `db`: database adapter (`Database` or `AsyncDatabase`).
+- `model`: dataclass model class handled by repository.
+- `auto_schema` (default `False`):
+  - `True`: auto create/sync schema for model on first action.
+  - `False`: no schema sync; you manage schema manually.
+- `schema_conflict` (default `"raise"`):
+  - `"raise"`: raise error when incompatible schema changes are detected.
+  - `"recreate"`: drop and recreate table when incompatible changes are detected.
+- `require_registration` (default `False`):
+  - `True`: must call `register(...)` before CRUD actions.
+  - `False`: repository auto-registers model on first action.
+
+`UnifiedRepository` / `AsyncUnifiedRepository` constructor uses the same three
+flags: `auto_schema`, `schema_conflict`, `require_registration`.
+
+Registration helpers:
+
+- `register(model, ensure=None)` / `await register(model, ensure=None)`:
+  - `ensure=None` (default): follow `auto_schema`.
+  - `ensure=True`: force schema ensure now, then register model.
+  - `ensure=False`: register only, no schema ensure at registration time.
+- `register_many([...], ensure=None)` / async equivalent: same behavior for many models.
+
+Unified mutation methods support 2 call styles:
+
+- Explicit model: `hub.insert(User, user_obj)` (backward compatible).
+- Object-only: `hub.insert(user_obj)` (model inferred from object type).
+
+This applies to mutation APIs: `insert`, `update`, `delete`, `create`, `insert_many`.
+Read/query APIs still use explicit model class: `get/list/count/exists/...`.
 
 ## Quick usage (Async SQL)
 
@@ -101,6 +149,16 @@ async def main() -> None:
 
 asyncio.run(main())
 ```
+
+`AsyncUnifiedRepository` is available with the same style and also supports
+inferring model from object for mutation methods:
+`await hub.insert(User(...))`, `await hub.update(user_obj)`, `await hub.delete(user_obj)`.
+Read/list/get still use model-class-first:
+`await hub.list(User)`, `await hub.get(User, id)`.
+You can enable schema auto-sync with `auto_schema=True` for both `Repository`
+and `AsyncRepository`/`AsyncUnifiedRepository`.
+For strict behavior, set `require_registration=True` and call `register(...)`
+or `register_many(...)` before actions.
 
 Async API keeps the same method names as sync (`insert`, `get`, `list`,
 `update`, `delete`, `count`, `exists`, `create`, `get_related`, ...). The only

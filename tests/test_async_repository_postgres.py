@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from mini_orm import (
+    AsyncUnifiedRepository,
     C,
     AsyncDatabase,
     AsyncRepository,
@@ -64,6 +65,25 @@ class AsyncPgCodecTicket:
     status: AsyncPgCodecStatus = AsyncPgCodecStatus.OPEN
     payload: dict[str, Any] = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
+
+
+@dataclass
+class AsyncPgAutoSchemaUserV1:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
+
+
+AsyncPgAutoSchemaUserV1.__table__ = "asyncpgautoschemauser"
+
+
+@dataclass
+class AsyncPgAutoSchemaUserV2:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
+    age: Optional[int] = None
+
+
+AsyncPgAutoSchemaUserV2.__table__ = "asyncpgautoschemauser"
 
 
 AsyncPgDialectAuthor.__relations__ = {
@@ -127,6 +147,7 @@ class AsyncRepositoryPostgresDialectTests(unittest.IsolatedAsyncioTestCase):
             await self.db.execute('DROP TABLE IF EXISTS "asyncpgdialectpost";')
             await self.db.execute('DROP TABLE IF EXISTS "asyncpgdialectauthor";')
             await self.db.execute('DROP TABLE IF EXISTS "asyncpgdialectuser";')
+            await self.db.execute('DROP TABLE IF EXISTS "asyncpgautoschemauser";')
         await apply_schema_async(self.db, AsyncPgDialectUser)
         await apply_schema_async(self.db, AsyncPgDialectAuthor)
         await apply_schema_async(self.db, AsyncPgDialectPost)
@@ -185,6 +206,78 @@ class AsyncRepositoryPostgresDialectTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.post_repo.count(), 2)
         loaded_posts = await self.post_repo.list(order_by=[OrderBy("id")])
         self.assertTrue(all(post.author_id == author.id for post in loaded_posts))
+
+    async def test_async_unified_repository_reuses_cached_repositories(self) -> None:
+        unified = AsyncUnifiedRepository(self.db)
+
+        user_repo_1 = unified.repo(AsyncPgDialectUser)
+        user_repo_2 = unified.repo(AsyncPgDialectUser)
+        author_repo = unified.repo(AsyncPgDialectAuthor)
+
+        self.assertIs(user_repo_1, user_repo_2)
+        self.assertIsNot(user_repo_1, author_repo)
+
+    async def test_async_unified_repository_crud_and_relations(self) -> None:
+        unified = AsyncUnifiedRepository(self.db)
+
+        async with self.db.transaction():
+            user = await unified.insert(AsyncPgDialectUser, AsyncPgDialectUser(email="hub@example.com", age=20))
+        self.assertIsNotNone(user.id)
+        self.assertEqual(await unified.count(AsyncPgDialectUser), 1)
+
+        loaded = await unified.get(AsyncPgDialectUser, user.id)
+        self.assertIsNotNone(loaded)
+        if loaded is None:
+            self.fail("Expected inserted row to exist.")
+
+        loaded.age = 21
+        async with self.db.transaction():
+            self.assertEqual(await unified.update(AsyncPgDialectUser, loaded), 1)
+        async with self.db.transaction():
+            self.assertEqual(await unified.delete(AsyncPgDialectUser, loaded), 1)
+        self.assertEqual(await unified.count(AsyncPgDialectUser), 0)
+
+        author = await unified.create(
+            AsyncPgDialectAuthor,
+            AsyncPgDialectAuthor(name="Unified Reader"),
+            relations={"posts": [AsyncPgDialectPost(title="T1"), AsyncPgDialectPost(title="T2")]},
+        )
+        self.assertIsNotNone(author.id)
+        if author.id is None:
+            self.fail("Expected author auto PK.")
+
+        author_with_posts = await unified.get_related(
+            AsyncPgDialectAuthor,
+            author.id,
+            include=["posts"],
+        )
+        self.assertIsNotNone(author_with_posts)
+        if author_with_posts is None:
+            self.fail("Expected related result for existing author.")
+        self.assertEqual(len(author_with_posts.relations["posts"]), 2)
+
+    async def test_async_repository_auto_schema_additive_for_postgres(self) -> None:
+        repo_v1 = AsyncRepository(self.db, AsyncPgAutoSchemaUserV1, auto_schema=True)
+        async with self.db.transaction():
+            await repo_v1.insert(AsyncPgAutoSchemaUserV1(email="a@example.com"))
+
+        repo_v2 = AsyncRepository(self.db, AsyncPgAutoSchemaUserV2, auto_schema=True)
+        async with self.db.transaction():
+            await repo_v2.insert(AsyncPgAutoSchemaUserV2(email="b@example.com", age=20))
+        self.assertEqual(await repo_v2.count(), 2)
+
+    async def test_async_unified_repository_auto_schema_additive_for_postgres(self) -> None:
+        unified = AsyncUnifiedRepository(self.db, auto_schema=True)
+        async with self.db.transaction():
+            await unified.insert(
+                AsyncPgAutoSchemaUserV1,
+                AsyncPgAutoSchemaUserV1(email="a@example.com"),
+            )
+            await unified.insert(
+                AsyncPgAutoSchemaUserV2,
+                AsyncPgAutoSchemaUserV2(email="b@example.com", age=20),
+            )
+        self.assertEqual(await unified.count(AsyncPgAutoSchemaUserV2), 2)
 
     async def test_get_related_and_list_related(self) -> None:
         author = await self.author_repo.create(

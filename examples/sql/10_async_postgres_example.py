@@ -22,7 +22,6 @@ from mini_orm import (
     AsyncDatabase,
     AsyncRepository,
     PostgresDialect,
-    apply_schema_async,
 )
 
 
@@ -73,12 +72,11 @@ async def main() -> None:
     # This wraps a synchronous psycopg/psycopg2 connection in AsyncDatabase.
     # For true async network I/O with psycopg3, use psycopg.AsyncConnection.connect(...).
     db = AsyncDatabase(conn, PostgresDialect())
-    repo = AsyncRepository[User](db, User)
+    repo = AsyncRepository[User](db, User, auto_schema=True)
 
     try:
         async with db.transaction():
             await db.execute('DROP TABLE IF EXISTS "user";')
-        await apply_schema_async(db, User)
 
         async with db.transaction():
             alice = await repo.insert(User(email="alice@example.com", age=25))
