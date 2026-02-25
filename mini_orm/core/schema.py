@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import Field
+from dataclasses import MISSING, Field
 from typing import Any, Type
 
 from .contracts import AsyncDatabasePort, DatabasePort, DialectPort
@@ -381,6 +381,12 @@ def _column_diff(
                     f"missing auto/pk column {field.name!r} cannot be added automatically"
                 )
                 continue
+            if not _can_add_missing_column_safely(field):
+                conflicts.append(
+                    f"missing NOT NULL column {field.name!r} cannot be added automatically; "
+                    "add it as nullable first or run a backfill/default migration explicitly"
+                )
+                continue
             missing_fields.append(field)
             continue
 
@@ -415,6 +421,27 @@ def _nullable_compat_for_pk_auto(
     if current_nullable:
         return False
     return bool(field.metadata.get("pk") or field.metadata.get("auto"))
+
+
+def _can_add_missing_column_safely(field: Field[Any]) -> bool:
+    if field.metadata.get("pk") or field.metadata.get("auto"):
+        return False
+
+    if field.metadata.get("nullable") is True:
+        return True
+
+    if is_nullable(field):
+        return True
+
+    # Field-level Python defaults/default_factory are not SQL defaults.
+    # Adding NOT NULL columns without an SQL backfill/default may fail on existing rows.
+    if field.default is not MISSING or field.default_factory is not MISSING:
+        return False
+
+    if "default" in field.metadata:
+        return False
+
+    return False
 
 
 def _add_column_sql(

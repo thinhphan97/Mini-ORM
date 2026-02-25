@@ -75,11 +75,19 @@ Unified constructors (`UnifiedRepository`, `AsyncUnifiedRepository`) use the sam
 
 Registration helpers:
 
-- `register(model, ensure=None)` / `await register(model, ensure=None)`
+- `Repository[T].register(ensure=None)` / `await AsyncRepository[T].register(ensure=None)`
+  - no model arg (model is bound in repository constructor).
   - `ensure=None`: follow `auto_schema`.
   - `ensure=True`: ensure schema immediately, then register.
   - `ensure=False`: only register.
-- `register_many(models, ensure=None)` / async equivalent: batch version.
+- `Repository[T].register_many(ensure=None)` / async equivalent:
+  - single-model alias for API consistency, same ensure behavior.
+- `UnifiedRepository.register(model, ensure=None)` / async equivalent:
+  - requires explicit model arg because unified hub manages many models.
+  - `ensure=None`: follow `auto_schema`.
+  - `ensure=True`: ensure schema immediately, then register that model.
+  - `ensure=False`: only register.
+- `UnifiedRepository.register_many(models, ensure=None)` / async equivalent: batch version.
 
 Unified mutation calls support:
 

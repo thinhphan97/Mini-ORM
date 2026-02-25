@@ -327,18 +327,34 @@ class RepositoryMySQLDialectTests(CodecRoundtripMixin, unittest.TestCase):
 
         repo_v2 = Repository(self.db, MySQLAutoSchemaUserV2, auto_schema=True)
         with self.db.transaction():
-            repo_v2.insert(MySQLAutoSchemaUserV2(email="b@example.com", age=20))
+            inserted = repo_v2.insert(MySQLAutoSchemaUserV2(email="b@example.com", age=20))
         self.assertEqual(repo_v2.count(), 2)
+        self.assertIsNotNone(inserted.id)
+        if inserted.id is None:
+            self.fail("Expected inserted row id.")
+        loaded = repo_v2.get(inserted.id)
+        self.assertIsNotNone(loaded)
+        if loaded is None:
+            self.fail("Expected inserted row to be readable.")
+        self.assertEqual(loaded.age, 20)
 
     def test_unified_repository_auto_schema_additive_for_mysql(self) -> None:
         unified = UnifiedRepository(self.db, auto_schema=True)
         with self.db.transaction():
             unified.insert(MySQLAutoSchemaUserV1, MySQLAutoSchemaUserV1(email="a@example.com"))
-            unified.insert(
+            inserted = unified.insert(
                 MySQLAutoSchemaUserV2,
                 MySQLAutoSchemaUserV2(email="b@example.com", age=20),
             )
         self.assertEqual(unified.count(MySQLAutoSchemaUserV2), 2)
+        self.assertIsNotNone(inserted.id)
+        if inserted.id is None:
+            self.fail("Expected inserted row id.")
+        loaded = unified.get(MySQLAutoSchemaUserV2, inserted.id)
+        self.assertIsNotNone(loaded)
+        if loaded is None:
+            self.fail("Expected inserted row to be readable.")
+        self.assertEqual(loaded.age, 20)
 
     def test_get_related_and_list_related(self) -> None:
         author = self.author_repo.create(

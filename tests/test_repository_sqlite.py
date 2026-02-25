@@ -302,6 +302,18 @@ class RepositorySQLiteTests(unittest.TestCase):
             schema_conflict="recreate",
         )
         self.assertEqual(recreated.count(AutoSchemaUserIncompatible), 0)
+        recreated_row = recreated.insert(
+            AutoSchemaUserIncompatible,
+            AutoSchemaUserIncompatible(email=123),
+        )
+        self.assertIsNotNone(recreated_row.id)
+        if recreated_row.id is None:
+            self.fail("Expected inserted row id after recreate.")
+        recreated_loaded = recreated.get(AutoSchemaUserIncompatible, recreated_row.id)
+        self.assertIsNotNone(recreated_loaded)
+        if recreated_loaded is None:
+            self.fail("Expected recreated schema row to be readable.")
+        self.assertEqual(recreated_loaded.email, 123)
 
     def test_unified_repository_auto_schema_relations_create_child_tables(self) -> None:
         conn = sqlite3.connect(":memory:")

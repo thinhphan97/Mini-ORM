@@ -35,12 +35,18 @@ Schema convenience options:
 
 ## Register args
 
-- `register(model, ensure=None)` / `await register(model, ensure=None)`
+- `Repository[T].register(ensure=None)` / `await AsyncRepository[T].register(ensure=None)`
   - `ensure=None` (default): follow `auto_schema`.
   - `ensure=True`: force ensure schema now, then register.
   - `ensure=False`: register only.
-- `register_many(models, ensure=None)` / async equivalent:
-  - same behavior applied for each model in the list.
+- `Repository[T].register_many(ensure=None)` / async equivalent:
+  - single-model alias with the same ensure behavior.
+- `UnifiedRepository.register(model, ensure=None)` / `await AsyncUnifiedRepository.register(model, ensure=None)`
+  - `ensure=None` (default): follow `auto_schema`.
+  - `ensure=True`: force ensure schema now, then register that model.
+  - `ensure=False`: register only.
+- `UnifiedRepository.register_many(models, ensure=None)` / async equivalent:
+  - apply the same ensure behavior per model in the list.
 
 ## Unified mutation args
 

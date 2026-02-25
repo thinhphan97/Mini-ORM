@@ -70,9 +70,11 @@ class Repository(Generic[T]):
     def register(self, *, ensure: bool | None = None) -> None:
         """Register current model and optionally ensure schema."""
 
-        if self.is_registered():
-            return
         should_ensure = self._auto_schema if ensure is None else ensure
+        if self.is_registered():
+            if should_ensure:
+                self._ensure_schema()
+            return
         if should_ensure:
             self._ensure_schema()
         self._registry.add(self.model)

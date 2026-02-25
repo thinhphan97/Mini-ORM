@@ -42,6 +42,11 @@ def resolve_model_and_objects(
     """Resolve `(model, objects)` from explicit or inferred unified call style."""
 
     if objects is None:
+        if isinstance(model_or_list, type):
+            raise ValueError(
+                "When passing a model class, you must also pass objects: "
+                "insert_many(Model, objects)."
+            )
         inferred_objects = cast(Sequence[T], model_or_list)
         if not inferred_objects:
             raise ValueError(

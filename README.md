@@ -110,6 +110,10 @@ Registration helpers (different signatures by repository type):
 - `Repository[T]` / `AsyncRepository[T]` (model is bound in constructor):
   - `repo.register(*, ensure=None)` / `await repo.register(*, ensure=None)`
   - `repo.register_many(*, ensure=None)` / `await repo.register_many(*, ensure=None)`
+  - `register_many` is an intentional single-model alias for API consistency and
+    delegates to `register(ensure=...)` internally
+    (`mini_orm.core.repository.Repository.register_many` and
+    `mini_orm.core.repository_async.AsyncRepository.register_many`).
 - `UnifiedRepository` / `AsyncUnifiedRepository` (model is passed per call):
   - `hub.register(model, ensure=None)` / `await hub.register(model, ensure=None)`
   - `hub.register_many([ModelA, ModelB], ensure=None)` / async equivalent
