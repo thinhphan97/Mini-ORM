@@ -29,6 +29,7 @@ class RelationCoordinator(Generic[T]):
 
     def __init__(self, repo: "Repository[T]") -> None:
         self.repo = repo
+        self._repo_cache: dict[type[DataclassModel], Any] = {}
 
     def create(self, obj: T, *, relations: Mapping[str, Any] | None = None) -> T:
         """Create one object and optionally create/link related records."""
@@ -215,8 +216,12 @@ class RelationCoordinator(Generic[T]):
             results[index][relation_name] = mapped.get(key)
 
     def _new_repo(self, model: type[DataclassModel]) -> Any:
+        cached = self._repo_cache.get(model)
+        if cached is not None:
+            return cached
+
         repo_type = type(self.repo)
-        return repo_type(
+        created = repo_type(
             self.repo.db,
             model,
             auto_schema=getattr(self.repo, "_auto_schema", False),
@@ -224,6 +229,8 @@ class RelationCoordinator(Generic[T]):
             require_registration=getattr(self.repo, "_require_registration", False),
             registry=getattr(self.repo, "_registry", None),
         )
+        self._repo_cache[model] = created
+        return created
 
     def _relation_spec(self, relation_name: str) -> RelationSpec:
         spec = self.repo.meta.relations.get(relation_name)

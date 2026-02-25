@@ -63,7 +63,7 @@ Repository constructors (`Repository`, `AsyncRepository`):
 
 - `auto_schema: bool = False`
   - `True`: ensure schema automatically on first action.
-  - `False`: do not auto ensure schema.
+  - `False`: do not auto-ensure schema.
 - `schema_conflict: str = "raise"`
   - `"raise"`: incompatible schema -> error.
   - `"recreate"`: incompatible schema -> drop/recreate table.

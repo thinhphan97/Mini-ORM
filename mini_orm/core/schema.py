@@ -17,6 +17,17 @@ from .schema_indexes import (
     model_column_names,
 )
 
+_ALLOWED_SCHEMA_CONFLICTS = frozenset({"raise", "recreate"})
+
+
+def validate_schema_conflict(schema_conflict: str) -> str:
+    """Validate schema conflict mode and return normalized value."""
+
+    if schema_conflict not in _ALLOWED_SCHEMA_CONFLICTS:
+        allowed = ", ".join(sorted(_ALLOWED_SCHEMA_CONFLICTS))
+        raise ValueError(f"schema_conflict must be one of: {allowed}.")
+    return schema_conflict
+
 
 def create_table_sql(
     cls: Type[DataclassModel],
@@ -145,6 +156,7 @@ def ensure_schema(
     """
 
     require_dataclass_model(cls)
+    schema_conflict = validate_schema_conflict(schema_conflict)
     table = table_name(cls)
 
     if not _table_exists(db, table):
@@ -156,8 +168,6 @@ def ensure_schema(
     if conflicts:
         if schema_conflict == "recreate":
             return _recreate_schema(db, cls)
-        if schema_conflict != "raise":
-            raise ValueError("schema_conflict must be 'raise' or 'recreate'.")
         raise ValueError(
             f"Incompatible schema for table {table!r}: " + "; ".join(conflicts)
         )
@@ -183,6 +193,7 @@ async def ensure_schema_async(
     """Async variant of `ensure_schema` with the same behavior."""
 
     require_dataclass_model(cls)
+    schema_conflict = validate_schema_conflict(schema_conflict)
     table = table_name(cls)
 
     if not await _table_exists_async(db, table):
@@ -194,8 +205,6 @@ async def ensure_schema_async(
     if conflicts:
         if schema_conflict == "recreate":
             return await _recreate_schema_async(db, cls)
-        if schema_conflict != "raise":
-            raise ValueError("schema_conflict must be 'raise' or 'recreate'.")
         raise ValueError(
             f"Incompatible schema for table {table!r}: " + "; ".join(conflicts)
         )
@@ -653,47 +662,120 @@ def _drop_index_sql(dialect: DialectPort, table: str, index_name: str) -> str:
     return f"DROP INDEX {index_sql};"
 
 
+def _type_tokens(raw: Any) -> tuple[str, ...]:
+    text = (
+        str(raw or "")
+        .upper()
+        .replace("(", " ")
+        .replace(")", " ")
+        .replace(",", " ")
+    )
+    return tuple(token for token in text.split() if token)
+
+
 def _normalize_type(raw: Any) -> str:
-    value = str(raw or "").upper().replace("(", " ").split()[0]
-    if value == "CHARACTER":
+    tokens = _type_tokens(raw)
+    if not tokens:
+        return ""
+
+    joined = " ".join(tokens)
+    aliases = {
+        "BOOL": "BOOLEAN",
+        "DATETIME": "TIMESTAMP",
+        "INT": "INTEGER",
+        "SERIAL": "INTEGER",
+        "SMALLSERIAL": "SMALLINT",
+        "BIGSERIAL": "BIGINT",
+        "CHARACTER": "TEXT",
+        "CHAR": "TEXT",
+        "VARCHAR": "TEXT",
+        "NVARCHAR": "TEXT",
+        "VARCHAR2": "TEXT",
+        "NVARCHAR2": "TEXT",
+        "CHARACTER VARYING": "TEXT",
+        "DOUBLE PRECISION": "DOUBLE",
+        "JSONB": "JSON",
+        "DEC": "DECIMAL",
+    }
+    exact = aliases.get(joined)
+    if exact is not None:
+        return exact
+
+    first = tokens[0]
+    if first in aliases:
+        return aliases[first]
+    if first in {"CHARACTER", "VARCHAR", "NVARCHAR"}:
         return "TEXT"
-    if value == "VARCHAR":
-        return "TEXT"
-    if value == "BOOL":
-        return "BOOLEAN"
-    if value == "DATETIME":
-        return "TIMESTAMP"
-    if value == "SERIAL":
-        return "INTEGER"
-    if value == "INT":
-        return "INTEGER"
-    return value
+    if "PRECISION" in tokens and "DOUBLE" in tokens:
+        return "DOUBLE"
+    if first in {"VARBINARY"}:
+        return "BLOB"
+    return first
 
 
 def _types_compatible(expected: str, current: str) -> bool:
-    if expected == current:
+    expected_normalized = _normalize_type(expected)
+    current_normalized = _normalize_type(current)
+    if expected_normalized == current_normalized:
         return True
 
     groups = {
-        "INTEGER": {"INTEGER", "BIGINT", "SMALLINT"},
+        "INTEGER": {"INTEGER", "BIGINT", "SMALLINT", "TINYINT", "MEDIUMINT"},
         "REAL": {"REAL", "FLOAT", "DOUBLE"},
-        "TEXT": {"TEXT", "CHAR", "STRING"},
+        "TEXT": {"TEXT", "CHAR", "STRING", "CLOB"},
         "BOOLEAN": {"BOOLEAN", "TINYINT"},
         "TIMESTAMP": {"TIMESTAMP"},
         "DATE": {"DATE"},
         "TIME": {"TIME"},
-        "NUMERIC": {"NUMERIC", "DECIMAL"},
-        "BLOB": {"BLOB", "BYTEA"},
+        "NUMERIC": {"NUMERIC", "DECIMAL", "NUMBER"},
+        "BLOB": {"BLOB", "BYTEA", "BINARY"},
+        "JSON": {"JSON"},
     }
-    expected_group = groups.get(expected, {expected})
-    return current in expected_group
+    for compatible in groups.values():
+        if expected_normalized in compatible and current_normalized in compatible:
+            return True
+
+    expected_tokens = set(_type_tokens(expected))
+    current_tokens = set(_type_tokens(current))
+    if expected_tokens and current_tokens:
+        if expected_tokens <= current_tokens or current_tokens <= expected_tokens:
+            return True
+
+        known_markers = {
+            "INTEGER",
+            "BIGINT",
+            "SMALLINT",
+            "TINYINT",
+            "REAL",
+            "FLOAT",
+            "DOUBLE",
+            "NUMERIC",
+            "DECIMAL",
+            "TEXT",
+            "CHARACTER",
+            "VARCHAR",
+            "BOOLEAN",
+            "TIMESTAMP",
+            "DATE",
+            "TIME",
+            "BLOB",
+            "BYTEA",
+            "JSON",
+        }
+        expected_markers = expected_tokens & known_markers
+        current_markers = current_tokens & known_markers
+        if expected_markers and expected_markers == current_markers:
+            return True
+
+    return False
 
 
 def _row_get(row: dict[str, Any], *keys: str, default: Any = None) -> Any:
     lowered = {str(key).lower(): value for key, value in row.items()}
+    sentinel = object()
     for key in keys:
-        value = lowered.get(key.lower())
-        if value is not None:
+        value = lowered.get(key.lower(), sentinel)
+        if value is not sentinel:
             return value
     return default
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Generic, Mapping, Optional, Sequence, Type, TypeVar, cast
 
+from ._unified_resolver import resolve_model_and_obj, resolve_model_and_objects
 from .conditions import OrderBy
 from .contracts import AsyncDatabasePort
 from .metadata import build_model_metadata
@@ -23,7 +24,7 @@ from .repository_crud_async import (
     update_where,
 )
 from .repository_relations_async import AsyncRelatedResult, AsyncRelationCoordinator
-from .schema import ensure_schema_async
+from .schema import ensure_schema_async, validate_schema_conflict
 
 T = TypeVar("T", bound=DataclassModel)
 
@@ -48,10 +49,10 @@ class AsyncRepository(Generic[T]):
         self.meta = build_model_metadata(model)
         self._relations = AsyncRelationCoordinator(self)
         self._auto_schema = auto_schema
-        self._schema_conflict = schema_conflict
+        self._schema_conflict = validate_schema_conflict(schema_conflict)
         self._require_registration = require_registration
         self._registry: set[type[DataclassModel]] = registry if registry is not None else set()
-        self._schema_ready = not auto_schema
+        self._schema_ready = False
 
     async def register(self, *, ensure: bool | None = None) -> None:
         """Register current model and optionally ensure schema."""
@@ -62,6 +63,11 @@ class AsyncRepository(Generic[T]):
         if should_ensure:
             await self._ensure_schema()
         self._registry.add(self.model)
+
+    async def register_many(self, *, ensure: bool | None = None) -> None:
+        """Single-model alias to mirror unified registration API shape."""
+
+        await self.register(ensure=ensure)
 
     def is_registered(self) -> bool:
         return self.model in self._registry
@@ -226,7 +232,7 @@ class AsyncUnifiedRepository:
         self.db = db
         self._repos: dict[type[DataclassModel], AsyncRepository[Any]] = {}
         self._auto_schema = auto_schema
-        self._schema_conflict = schema_conflict
+        self._schema_conflict = validate_schema_conflict(schema_conflict)
         self._require_registration = require_registration
         self._registry: set[type[DataclassModel]] = set()
 
@@ -270,53 +276,14 @@ class AsyncUnifiedRepository:
         model_or_object: Type[T] | T,
         obj: T | None = None,
     ) -> tuple[Type[T], T]:
-        if obj is None:
-            if isinstance(model_or_object, type):
-                raise TypeError("Object instance is required when passing a model class.")
-            inferred_model = type(model_or_object)
-            require_dataclass_model(inferred_model)
-            return cast(Type[T], inferred_model), cast(T, model_or_object)
-
-        if not isinstance(model_or_object, type):
-            raise TypeError(
-                "First argument must be a model class when second argument is provided."
-            )
-        require_dataclass_model(model_or_object)
-        if not isinstance(obj, model_or_object):
-            raise TypeError(
-                f"Object type {type(obj).__name__} does not match model "
-                f"{model_or_object.__name__}."
-            )
-        return model_or_object, obj
+        return resolve_model_and_obj(model_or_object, obj)
 
     def _resolve_model_and_objects(
         self,
         model_or_list: Type[T] | Sequence[T],
         objects: Sequence[T] | None = None,
     ) -> tuple[Type[T], Sequence[T]]:
-        if objects is None:
-            inferred_objects = cast(Sequence[T], model_or_list)
-            if not inferred_objects:
-                raise ValueError(
-                    "Cannot infer model from an empty objects sequence. "
-                    "Pass model explicitly: insert_many(Model, objects)."
-                )
-            inferred_model = type(inferred_objects[0])
-            require_dataclass_model(inferred_model)
-            for item in inferred_objects:
-                if not isinstance(item, inferred_model):
-                    raise TypeError("All objects must share the same model class.")
-            return cast(Type[T], inferred_model), inferred_objects
-
-        if not isinstance(model_or_list, type):
-            raise TypeError(
-                "First argument must be a model class when second argument is provided."
-            )
-        require_dataclass_model(model_or_list)
-        for item in objects:
-            if not isinstance(item, model_or_list):
-                raise TypeError("All objects must match the provided model class.")
-        return model_or_list, objects
+        return resolve_model_and_objects(model_or_list, objects)
 
     async def insert(self, model_or_object: Type[T] | T, obj: T | None = None) -> T:
         model, resolved_obj = self._resolve_model_and_obj(model_or_object, obj)

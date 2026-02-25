@@ -37,11 +37,11 @@ class Post:
 
 def main() -> None:
     conn = sqlite3.connect(":memory:")
-    db = Database(conn, SQLiteDialect())
-    hub = UnifiedRepository(db, auto_schema=True, require_registration=True)
-    hub.register_many([Author, Post])
-
     try:
+        db = Database(conn, SQLiteDialect())
+        hub = UnifiedRepository(db, auto_schema=True, require_registration=True)
+        hub.register_many([Author, Post])
+
         author = hub.create(
             Author(name="Alice"),
             relations={"posts": [Post(title="P1"), Post(title="P2")]},

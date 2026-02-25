@@ -332,15 +332,14 @@ class AsyncRepositoryMySQLDialectTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_async_unified_repository_auto_schema_additive_for_mysql(self) -> None:
         unified = AsyncUnifiedRepository(self.db, auto_schema=True)
-        async with self.db.transaction():
-            await unified.insert(
-                AsyncMySQLAutoSchemaUserV1,
-                AsyncMySQLAutoSchemaUserV1(email="a@example.com"),
-            )
-            await unified.insert(
-                AsyncMySQLAutoSchemaUserV2,
-                AsyncMySQLAutoSchemaUserV2(email="b@example.com", age=20),
-            )
+        await unified.insert(
+            AsyncMySQLAutoSchemaUserV1,
+            AsyncMySQLAutoSchemaUserV1(email="a@example.com"),
+        )
+        await unified.insert(
+            AsyncMySQLAutoSchemaUserV2,
+            AsyncMySQLAutoSchemaUserV2(email="b@example.com", age=20),
+        )
         self.assertEqual(await unified.count(AsyncMySQLAutoSchemaUserV2), 2)
 
     async def test_get_related_and_list_related(self) -> None:

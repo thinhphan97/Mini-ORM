@@ -74,7 +74,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Optional
 
-from mini_orm import AsyncDatabase, AsyncRepository, SQLiteDialect, apply_schema_async
+from mini_orm import AsyncDatabase, AsyncRepository, SQLiteDialect
 
 @dataclass
 class User:
@@ -84,12 +84,13 @@ class User:
 async def main() -> None:
     conn = sqlite3.connect(":memory:")
     db = AsyncDatabase(conn, SQLiteDialect())
-    await apply_schema_async(db, User)
-    repo = AsyncRepository[User](db, User)
-    await repo.insert(User(email="alice@example.com"))
-    rows = await repo.list()
-    print(rows)
-    conn.close()
+    try:
+        repo = AsyncRepository[User](db, User, auto_schema=True)
+        await repo.insert(User(email="alice@example.com"))
+        rows = await repo.list()
+        print(rows)
+    finally:
+        conn.close()
 
 asyncio.run(main())
 ```

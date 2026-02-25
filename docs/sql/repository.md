@@ -8,10 +8,10 @@ when you prefer one hub object for multiple tables. For mutation methods
 from object input.
 
 Schema convenience options:
-- `auto_schema=True`: auto create/sync schema on first action (or when calling `register(...)`).
+- `auto_schema=True`: automatically create/sync schema on first action (or when calling `register(...)`).
 - `schema_conflict="raise" | "recreate"`: behavior for incompatible column changes.
 - `require_registration=True`: require `register()` / `register_many(...)` before actions.
-- `register(..., ensure=False)` lets you register only; schema can still be ensured on first action when `auto_schema=True`.
+- `register(..., ensure=False)` registers the model without schema ensure; because the model is already registered, first action also skips automatic schema ensure (even when `auto_schema=True`).
 
 ## Constructor args
 

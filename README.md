@@ -105,13 +105,17 @@ rows = hub.list(User)
 `UnifiedRepository` / `AsyncUnifiedRepository` constructor uses the same three
 flags: `auto_schema`, `schema_conflict`, `require_registration`.
 
-Registration helpers:
+Registration helpers (different signatures by repository type):
 
-- `register(model, ensure=None)` / `await register(model, ensure=None)`:
-  - `ensure=None` (default): follow `auto_schema`.
-  - `ensure=True`: force schema ensure now, then register model.
-  - `ensure=False`: register only, no schema ensure at registration time.
-- `register_many([...], ensure=None)` / async equivalent: same behavior for many models.
+- `Repository[T]` / `AsyncRepository[T]` (model is bound in constructor):
+  - `repo.register(*, ensure=None)` / `await repo.register(*, ensure=None)`
+  - `repo.register_many(*, ensure=None)` / `await repo.register_many(*, ensure=None)`
+- `UnifiedRepository` / `AsyncUnifiedRepository` (model is passed per call):
+  - `hub.register(model, ensure=None)` / `await hub.register(model, ensure=None)`
+  - `hub.register_many([ModelA, ModelB], ensure=None)` / async equivalent
+- `ensure=None` (default): follow `auto_schema`.
+- `ensure=True`: force schema ensure now, then register.
+- `ensure=False`: register only (and because model is already registered, first action also skips auto schema ensure).
 
 Unified mutation methods support 2 call styles:
 

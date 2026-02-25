@@ -43,11 +43,11 @@ class Post:
 
 async def main() -> None:
     conn = sqlite3.connect(":memory:")
-    db = AsyncDatabase(conn, SQLiteDialect())
-    hub = AsyncUnifiedRepository(db, auto_schema=True, require_registration=True)
-    await hub.register_many([Author, Post])
-
     try:
+        db = AsyncDatabase(conn, SQLiteDialect())
+        hub = AsyncUnifiedRepository(db, auto_schema=True, require_registration=True)
+        await hub.register_many([Author, Post])
+
         author = await hub.create(
             Author(name="Alice"),
             relations={"posts": [Post(title="P1"), Post(title="P2")]},
