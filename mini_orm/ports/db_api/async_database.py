@@ -24,10 +24,19 @@ class AsyncDatabase:
         self.conn = conn
         self.dialect = dialect
 
+    def _should_begin_sqlite_transaction(self) -> bool:
+        if getattr(self.dialect, "name", "").lower() != "sqlite":
+            return False
+        if getattr(self.conn, "isolation_level", None) is not None:
+            return False
+        return not bool(getattr(self.conn, "in_transaction", False))
+
     @contextlib.asynccontextmanager
     async def transaction(self):
         """Provide async commit/rollback transaction scope."""
 
+        if self._should_begin_sqlite_transaction():
+            await _maybe_await(self.conn.execute("BEGIN"))
         try:
             yield
         except BaseException:

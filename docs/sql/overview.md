@@ -5,15 +5,96 @@
 1. Define a dataclass model.
 2. Create a `Database` adapter with a SQL dialect.
 3. Apply schema (`apply_schema`).
-4. Use `Repository[T]` for CRUD and filtering.
+4. Use `Repository[T]` for single-model access, or `UnifiedRepository` when one
+   hub object should route by model class.
+   Mutation methods can infer model from object (`hub.insert(User(...))`).
+   Optionally set `auto_schema=True` to create/sync schema automatically on first action
+   (or when calling `register(...)`).
+   Set `require_registration=True` if you want explicit model registration before actions.
 
 ## Async flow (same method names)
 
 1. Define a dataclass model.
 2. Create an `AsyncDatabase` adapter with a SQL dialect.
 3. Apply schema (`await apply_schema_async(...)`).
-4. Use `AsyncRepository[T]` with the same method names as sync
+4. Use `AsyncRepository[T]` for single-model access, or `AsyncUnifiedRepository`
+   for one async hub object routing by model class, with the same method names as sync
    (`insert`, `get`, `list`, `update`, `delete`, ...), but with `await`.
+   Async unified mutation methods can infer model from object as well.
+   Optionally set `auto_schema=True` for automatic schema ensure on first action
+   (or when calling `register(...)`).
+   Set `require_registration=True` for explicit registration workflow.
+
+## Unified hub (multi-model)
+
+```python
+import asyncio
+
+from mini_orm import UnifiedRepository, AsyncUnifiedRepository
+
+# sync
+hub = UnifiedRepository(db, auto_schema=True, require_registration=True)
+hub.register(User)
+user = hub.insert(User(email="alice@example.com"))  # infer model from object
+rows = hub.list(User)
+
+# async
+async def main() -> None:
+    async_hub = AsyncUnifiedRepository(
+        async_db,
+        auto_schema=True,
+        require_registration=True,
+    )
+    await async_hub.register(User)
+    user = await async_hub.insert(User(email="alice@example.com"))
+    rows = await async_hub.list(User)
+    print(user, rows)
+
+asyncio.run(main())
+```
+
+`schema_conflict` controls incompatible changes:
+- `"raise"` (default): raise clear error.
+- `"recreate"`: drop/recreate table for that model.
+
+## Args quick reference
+
+Repository constructors (`Repository`, `AsyncRepository`):
+
+- `auto_schema: bool = False`
+  - `True`: ensure schema automatically on first action.
+  - `False`: do not auto-ensure schema.
+- `schema_conflict: str = "raise"`
+  - `"raise"`: incompatible schema -> error.
+  - `"recreate"`: incompatible schema -> drop/recreate table.
+- `require_registration: bool = False`
+  - `True`: require explicit `register(...)` before actions.
+  - `False`: model auto-registers on first action.
+
+Unified constructors (`UnifiedRepository`, `AsyncUnifiedRepository`) use the same args.
+
+Registration helpers:
+
+- `Repository[T].register(ensure=None)` / `await AsyncRepository[T].register(ensure=None)`
+  - no model arg (model is bound in repository constructor).
+  - `ensure=None`: follow `auto_schema`.
+  - `ensure=True`: ensure schema immediately, then register.
+  - `ensure=False`: only register.
+- `Repository[T].register_many(ensure=None)` / async equivalent:
+  - single-model alias for API consistency, same ensure behavior.
+- `UnifiedRepository.register(model, ensure=None)` / async equivalent:
+  - requires explicit model arg because unified hub manages many models.
+  - `ensure=None`: follow `auto_schema`.
+  - `ensure=True`: ensure schema immediately, then register that model.
+  - `ensure=False`: only register.
+- `UnifiedRepository.register_many(models, ensure=None)` / async equivalent: batch version.
+
+Unified mutation calls support:
+
+- explicit model: `hub.insert(User, user_obj)`.
+- inferred model: `hub.insert(user_obj)`.
+
+Inference also applies to: `update`, `delete`, `create`, `insert_many`.
 
 ## Relations via metadata
 

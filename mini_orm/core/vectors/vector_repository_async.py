@@ -6,8 +6,8 @@ import inspect
 from typing import Any, Mapping, Optional, Sequence
 from uuid import UUID
 
-from ._async_utils import _maybe_await
-from .contracts import AsyncVectorStorePort, VectorStorePort
+from .._async_utils import _maybe_await
+from ..contracts import AsyncVectorStorePort, VectorStorePort
 from .vector_codecs import IdentityVectorPayloadCodec, VectorPayloadCodec
 from .vector_metrics import VectorMetric, VectorMetricInput, normalize_vector_metric
 from .vector_policies import VectorIdPolicy

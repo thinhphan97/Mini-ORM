@@ -2,6 +2,67 @@
 
 `Repository[T]` provides single-table CRUD with optional filtering and pagination.
 `AsyncRepository[T]` provides the same API surface with `await`.
+`UnifiedRepository` / `AsyncUnifiedRepository` route the same APIs by model class
+when you prefer one hub object for multiple tables. For mutation methods
+(`insert`/`update`/`delete`/`create`/`insert_many`), model can be inferred
+from object input.
+
+Schema convenience options:
+- `auto_schema=True`: automatically create/sync schema on first action (or when calling `register(...)`).
+- `schema_conflict="raise" | "recreate"`: behavior for incompatible column changes.
+- `require_registration=True`: require `register()` / `register_many(...)` before actions.
+- `register(..., ensure=False)` registers the model without schema ensure; because the model is already registered, first action also skips automatic schema ensure (even when `auto_schema=True`).
+
+## Constructor args
+
+`Repository(db, model, *, auto_schema=False, schema_conflict="raise", require_registration=False)`
+
+`AsyncRepository(db, model, *, auto_schema=False, schema_conflict="raise", require_registration=False)`
+
+- `db`: DB adapter instance.
+- `model`: dataclass model class this repository manages.
+- `auto_schema`:
+  - `False` (default): no automatic schema work.
+  - `True`: ensure schema on first action (or during `register(..., ensure=True)`).
+- `schema_conflict`:
+  - `"raise"` (default): stop with clear error when schema is incompatible.
+  - `"recreate"`: drop and recreate table on incompatible changes.
+- `require_registration`:
+  - `False` (default): model auto-registers on first action.
+  - `True`: must call `register(...)` first, otherwise CRUD raises.
+
+`UnifiedRepository` / `AsyncUnifiedRepository` use the same flags.
+
+## Register args
+
+- `Repository[T].register(ensure=None)` / `await AsyncRepository[T].register(ensure=None)`
+  - `ensure=None` (default): follow `auto_schema`.
+  - `ensure=True`: force ensure schema now, then register.
+  - `ensure=False`: register only.
+- `Repository[T].register_many(ensure=None)` / async equivalent:
+  - single-model alias with the same ensure behavior.
+- `UnifiedRepository.register(model, ensure=None)` / `await AsyncUnifiedRepository.register(model, ensure=None)`
+  - `ensure=None` (default): follow `auto_schema`.
+  - `ensure=True`: force ensure schema now, then register that model.
+  - `ensure=False`: register only.
+- `UnifiedRepository.register_many(models, ensure=None)` / async equivalent:
+  - apply the same ensure behavior per model in the list.
+
+## Unified mutation args
+
+For these methods: `insert`, `update`, `delete`, `create`, `insert_many`.
+
+You can call in 2 ways:
+
+- Explicit model:
+  - `hub.insert(User, user_obj)`
+  - `hub.insert_many(User, [u1, u2])`
+- Inferred model from object:
+  - `hub.insert(user_obj)`
+  - `hub.insert_many([u1, u2])`
+
+Read/query methods remain model-class-first:
+- `get(User, id)`, `list(User, ...)`, `count(User, ...)`, `exists(User, ...)`, ...
 
 ## Async equivalent (same method names)
 
@@ -84,6 +145,34 @@ row, created = repo.get_or_create(
     lookup={"email": "first@example.com"},
     defaults={"age": 20},
 )
+```
+
+## Unified repository hub (multi-model)
+
+```python
+from mini_orm import UnifiedRepository
+
+hub = UnifiedRepository(db, auto_schema=True, require_registration=True)
+hub.register(User)
+hub.insert(User(email="u1@example.com"))  # infer model from object
+users = hub.list(User)
+```
+
+Async:
+
+```python
+import asyncio
+
+from mini_orm import AsyncUnifiedRepository
+
+async def main() -> None:
+    hub = AsyncUnifiedRepository(async_db, auto_schema=True, require_registration=True)
+    await hub.register(User)
+    await hub.insert(User(email="u1@example.com"))
+    users = await hub.list(User)
+    print(users)
+
+asyncio.run(main())
 ```
 
 ## Field codecs (Enum/JSON)

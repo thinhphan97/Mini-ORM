@@ -7,7 +7,15 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
-from mini_orm import C, Database, OrderBy, PostgresDialect, Repository, apply_schema
+from mini_orm import (
+    C,
+    Database,
+    OrderBy,
+    PostgresDialect,
+    Repository,
+    UnifiedRepository,
+    apply_schema,
+)
 from tests._codec_roundtrip_mixin import CodecRoundtripMixin
 
 
@@ -58,6 +66,25 @@ class PgCodecTicket:
     status: PgCodecStatus = PgCodecStatus.OPEN
     payload: dict[str, Any] = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
+
+
+@dataclass
+class PgAutoSchemaUserV1:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
+
+
+PgAutoSchemaUserV1.__table__ = "pgautoschemauser"
+
+
+@dataclass
+class PgAutoSchemaUserV2:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
+    age: Optional[int] = None
+
+
+PgAutoSchemaUserV2.__table__ = "pgautoschemauser"
 
 
 PgDialectAuthor.__relations__ = {
@@ -123,6 +150,7 @@ class RepositoryPostgresDialectTests(CodecRoundtripMixin, unittest.TestCase):
             self.db.execute('DROP TABLE IF EXISTS "pgdialectpost";')
             self.db.execute('DROP TABLE IF EXISTS "pgdialectauthor";')
             self.db.execute('DROP TABLE IF EXISTS "pgdialectuser";')
+            self.db.execute('DROP TABLE IF EXISTS "pgautoschemauser";')
         apply_schema(self.db, PgDialectUser)
         apply_schema(self.db, PgDialectAuthor)
         apply_schema(self.db, PgDialectPost)
@@ -181,6 +209,75 @@ class RepositoryPostgresDialectTests(CodecRoundtripMixin, unittest.TestCase):
         self.assertEqual(self.post_repo.count(), 2)
         loaded_posts = self.post_repo.list(order_by=[OrderBy("id")])
         self.assertTrue(all(post.author_id == author.id for post in loaded_posts))
+
+    def test_unified_repository_reuses_cached_repositories(self) -> None:
+        unified = UnifiedRepository(self.db)
+
+        user_repo_1 = unified.repo(PgDialectUser)
+        user_repo_2 = unified.repo(PgDialectUser)
+        author_repo = unified.repo(PgDialectAuthor)
+
+        self.assertIs(user_repo_1, user_repo_2)
+        self.assertIsNot(user_repo_1, author_repo)
+
+    def test_unified_repository_crud_and_relations(self) -> None:
+        unified = UnifiedRepository(self.db)
+
+        with self.db.transaction():
+            user = unified.insert(PgDialectUser, PgDialectUser(email="hub@example.com", age=20))
+        self.assertIsNotNone(user.id)
+        self.assertEqual(unified.count(PgDialectUser), 1)
+
+        loaded = unified.get(PgDialectUser, user.id)
+        self.assertIsNotNone(loaded)
+        if loaded is None:
+            self.fail("Expected inserted row to exist.")
+
+        loaded.age = 21
+        with self.db.transaction():
+            self.assertEqual(unified.update(PgDialectUser, loaded), 1)
+        with self.db.transaction():
+            self.assertEqual(unified.delete(PgDialectUser, loaded), 1)
+        self.assertEqual(unified.count(PgDialectUser), 0)
+
+        author = unified.create(
+            PgDialectAuthor,
+            PgDialectAuthor(name="Unified Reader"),
+            relations={"posts": [PgDialectPost(title="T1"), PgDialectPost(title="T2")]},
+        )
+        self.assertIsNotNone(author.id)
+        if author.id is None:
+            self.fail("Expected author auto PK.")
+
+        author_with_posts = unified.get_related(
+            PgDialectAuthor,
+            author.id,
+            include=["posts"],
+        )
+        self.assertIsNotNone(author_with_posts)
+        if author_with_posts is None:
+            self.fail("Expected related result for existing author.")
+        self.assertEqual(len(author_with_posts.relations["posts"]), 2)
+
+    def test_repository_auto_schema_additive_for_postgres(self) -> None:
+        repo_v1 = Repository(self.db, PgAutoSchemaUserV1, auto_schema=True)
+        with self.db.transaction():
+            repo_v1.insert(PgAutoSchemaUserV1(email="a@example.com"))
+
+        repo_v2 = Repository(self.db, PgAutoSchemaUserV2, auto_schema=True)
+        with self.db.transaction():
+            repo_v2.insert(PgAutoSchemaUserV2(email="b@example.com", age=20))
+        self.assertEqual(repo_v2.count(), 2)
+
+    def test_unified_repository_auto_schema_additive_for_postgres(self) -> None:
+        unified = UnifiedRepository(self.db, auto_schema=True)
+        with self.db.transaction():
+            unified.insert(PgAutoSchemaUserV1, PgAutoSchemaUserV1(email="a@example.com"))
+            unified.insert(
+                PgAutoSchemaUserV2,
+                PgAutoSchemaUserV2(email="b@example.com", age=20),
+            )
+        self.assertEqual(unified.count(PgAutoSchemaUserV2), 2)
 
     def test_get_related_and_list_related(self) -> None:
         author = self.author_repo.create(

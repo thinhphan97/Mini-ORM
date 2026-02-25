@@ -20,30 +20,30 @@
 
 ::: mini_orm.core.metadata
 
-## `mini_orm.core.schema`
+## `mini_orm.core.schemas.schema`
 
-::: mini_orm.core.schema
+::: mini_orm.core.schemas.schema
 
-## `mini_orm.core.repository`
+## `mini_orm.core.repositories.repository`
 
-::: mini_orm.core.repository
+::: mini_orm.core.repositories.repository
 
-## `mini_orm.core.repository_async`
+## `mini_orm.core.repositories.repository_async`
 
-::: mini_orm.core.repository_async
+::: mini_orm.core.repositories.repository_async
 
-## `mini_orm.core.vector_types`
+## `mini_orm.core.vectors.vector_types`
 
-::: mini_orm.core.vector_types
+::: mini_orm.core.vectors.vector_types
 
-## `mini_orm.core.vector_codecs`
+## `mini_orm.core.vectors.vector_codecs`
 
-::: mini_orm.core.vector_codecs
+::: mini_orm.core.vectors.vector_codecs
 
-## `mini_orm.core.vector_repository`
+## `mini_orm.core.vectors.vector_repository`
 
-::: mini_orm.core.vector_repository
+::: mini_orm.core.vectors.vector_repository
 
-## `mini_orm.core.vector_repository_async`
+## `mini_orm.core.vectors.vector_repository_async`
 
-::: mini_orm.core.vector_repository_async
+::: mini_orm.core.vectors.vector_repository_async
