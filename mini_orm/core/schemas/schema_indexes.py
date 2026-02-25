@@ -6,8 +6,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Type
 
-from .contracts import DialectPort
-from .models import DataclassModel, model_fields
+from ..contracts import DialectPort
+from ..models import DataclassModel, model_fields
 
 
 @dataclass(frozen=True)

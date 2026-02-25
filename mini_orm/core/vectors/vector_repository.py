@@ -5,7 +5,7 @@ from __future__ import annotations
 from uuid import UUID
 from typing import Any, Mapping, Optional, Sequence
 
-from .contracts import VectorStorePort
+from ..contracts import VectorStorePort
 from .vector_codecs import IdentityVectorPayloadCodec, VectorPayloadCodec
 from .vector_metrics import VectorMetric, VectorMetricInput, normalize_vector_metric
 from .vector_policies import VectorIdPolicy

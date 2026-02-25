@@ -1,4 +1,4 @@
-"""Relation orchestration for repository create/get/list APIs."""
+"""Async relation orchestration for repository create/get/list APIs."""
 
 from __future__ import annotations
 
@@ -6,61 +6,61 @@ from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, Mapping, Optional, Sequence, TypeVar
 
-from .conditions import C, OrderBy
-from .models import DataclassModel, RelationSpec
-from .query_builder import WhereInput
+from ..conditions import C, OrderBy
+from ..models import DataclassModel, RelationSpec
+from ..query_builder import WhereInput
 
 if TYPE_CHECKING:
-    from .repository import Repository
+    from .repository_async import AsyncRepository
 
 T = TypeVar("T", bound=DataclassModel)
 
 
 @dataclass(frozen=True)
-class RelatedResult(Generic[T]):
+class AsyncRelatedResult(Generic[T]):
     """One record and its requested related records."""
 
     obj: T
     relations: dict[str, Any]
 
 
-class RelationCoordinator(Generic[T]):
-    """Encapsulates relation create/link and eager-load workflows."""
+class AsyncRelationCoordinator(Generic[T]):
+    """Encapsulates async relation create/link and eager-load workflows."""
 
-    def __init__(self, repo: "Repository[T]") -> None:
+    def __init__(self, repo: "AsyncRepository[T]") -> None:
         self.repo = repo
         self._repo_cache: dict[type[DataclassModel], Any] = {}
 
-    def create(self, obj: T, *, relations: Mapping[str, Any] | None = None) -> T:
+    async def create(self, obj: T, *, relations: Mapping[str, Any] | None = None) -> T:
         """Create one object and optionally create/link related records."""
 
         if not relations:
-            return self.repo.insert(obj)
+            return await self.repo.insert(obj)
 
         relation_items = list(relations.items())
-        with self.repo.db.transaction():
-            self._insert_belongs_to_relations(obj, relation_items)
-            self.repo.insert(obj)
-            self._insert_has_many_relations(obj, relation_items)
+        async with self.repo.db.transaction():
+            await self._insert_belongs_to_relations(obj, relation_items)
+            await self.repo.insert(obj)
+            await self._insert_has_many_relations(obj, relation_items)
 
         return obj
 
-    def get_related(
+    async def get_related(
         self,
         pk_value: Any,
         *,
         include: Sequence[str],
-    ) -> Optional[RelatedResult[T]]:
+    ) -> Optional[AsyncRelatedResult[T]]:
         """Get one record and requested relations in one result object."""
 
-        obj = self.repo.get(pk_value)
+        obj = await self.repo.get(pk_value)
         if obj is None:
             return None
 
-        loaded = self._load_relations_for_objects([obj], include=include)
-        return RelatedResult(obj=obj, relations=loaded[0])
+        loaded = await self._load_relations_for_objects([obj], include=include)
+        return AsyncRelatedResult(obj=obj, relations=loaded[0])
 
-    def list_related(
+    async def list_related(
         self,
         *,
         include: Sequence[str],
@@ -68,22 +68,22 @@ class RelationCoordinator(Generic[T]):
         order_by: Sequence[OrderBy] | None = None,
         limit: int | None = None,
         offset: int | None = None,
-    ) -> list[RelatedResult[T]]:
+    ) -> list[AsyncRelatedResult[T]]:
         """List records with requested related records."""
 
-        rows = self.repo.list(
+        rows = await self.repo.list(
             where=where,
             order_by=order_by,
             limit=limit,
             offset=offset,
         )
-        loaded = self._load_relations_for_objects(rows, include=include)
+        loaded = await self._load_relations_for_objects(rows, include=include)
         return [
-            RelatedResult(obj=row, relations=relations)
-            for row, relations in zip(rows, loaded)
+            AsyncRelatedResult(obj=row, relations=relations)
+            for row, relations in zip(rows, loaded, strict=True)
         ]
 
-    def _insert_belongs_to_relations(
+    async def _insert_belongs_to_relations(
         self,
         obj: T,
         relation_items: Sequence[tuple[str, Any]],
@@ -98,10 +98,14 @@ class RelationCoordinator(Generic[T]):
                 )
 
             related_repo = self._new_repo(spec.model)
-            related_repo.insert(relation_value)
-            setattr(obj, spec.local_key, getattr(relation_value, spec.remote_key))
+            inserted_relation = await related_repo.insert(relation_value)
+            setattr(
+                obj,
+                spec.local_key,
+                getattr(inserted_relation, spec.remote_key),
+            )
 
-    def _insert_has_many_relations(
+    async def _insert_has_many_relations(
         self,
         obj: T,
         relation_items: Sequence[tuple[str, Any]],
@@ -119,7 +123,7 @@ class RelationCoordinator(Generic[T]):
                         f"Relation {relation_name!r} expects {spec.model.__name__}."
                     )
                 setattr(child, spec.remote_key, getattr(obj, spec.local_key))
-            related_repo.insert_many(relation_value)
+            await related_repo.insert_many(relation_value)
 
     def _ensure_relation_sequence(
         self,
@@ -133,7 +137,7 @@ class RelationCoordinator(Generic[T]):
                 f"{spec.model.__name__} objects."
             )
 
-    def _load_relations_for_objects(
+    async def _load_relations_for_objects(
         self,
         objects: Sequence[T],
         *,
@@ -148,31 +152,39 @@ class RelationCoordinator(Generic[T]):
 
         results: list[dict[str, Any]] = [dict() for _ in objects]
 
+        tasks: list[Any] = []
         for relation_name in include_names:
             spec = self._relation_spec(relation_name)
             related_repo = self._new_repo(spec.model)
 
             if spec.many:
-                self._attach_has_many_relation(
+                tasks.append(
+                    self._attach_has_many_relation(
+                        results,
+                        objects=objects,
+                        relation_name=relation_name,
+                        spec=spec,
+                        related_repo=related_repo,
+                    )
+                )
+                continue
+
+            tasks.append(
+                self._attach_belongs_to_relation(
                     results,
                     objects=objects,
                     relation_name=relation_name,
                     spec=spec,
                     related_repo=related_repo,
                 )
-                continue
-
-            self._attach_belongs_to_relation(
-                results,
-                objects=objects,
-                relation_name=relation_name,
-                spec=spec,
-                related_repo=related_repo,
             )
+
+        for coro in tasks:
+            await coro
 
         return results
 
-    def _attach_has_many_relation(
+    async def _attach_has_many_relation(
         self,
         results: list[dict[str, Any]],
         *,
@@ -184,7 +196,7 @@ class RelationCoordinator(Generic[T]):
         owner_keys = self._dedupe_non_null([getattr(obj, spec.local_key) for obj in objects])
         grouped: dict[Any, list[DataclassModel]] = {}
         if owner_keys:
-            related_rows = related_repo.list(
+            related_rows = await related_repo.list(
                 where=C.in_(spec.remote_key, owner_keys),
                 order_by=[OrderBy(spec.remote_key), OrderBy(related_repo.meta.pk)],
             )
@@ -195,7 +207,7 @@ class RelationCoordinator(Generic[T]):
             key = getattr(obj, spec.local_key)
             results[index][relation_name] = grouped.get(key, [])
 
-    def _attach_belongs_to_relation(
+    async def _attach_belongs_to_relation(
         self,
         results: list[dict[str, Any]],
         *,
@@ -207,7 +219,7 @@ class RelationCoordinator(Generic[T]):
         fk_values = self._dedupe_non_null([getattr(obj, spec.local_key) for obj in objects])
         mapped: dict[Any, DataclassModel] = {}
         if fk_values:
-            related_rows = related_repo.list(where=C.in_(spec.remote_key, fk_values))
+            related_rows = await related_repo.list(where=C.in_(spec.remote_key, fk_values))
             for row in related_rows:
                 mapped[getattr(row, spec.remote_key)] = row
 

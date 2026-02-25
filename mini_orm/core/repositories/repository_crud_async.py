@@ -5,14 +5,14 @@ from __future__ import annotations
 from collections.abc import Sequence as SequenceABC
 from typing import Any, Mapping, Sequence
 
-from .codecs import serialize_model_value
-from .conditions import C, Condition, ConditionGroup, NotCondition
-from .models import (
+from ..codecs import serialize_model_value
+from ..conditions import C, Condition, ConditionGroup, NotCondition
+from ..models import (
     model_fields,
     row_to_model,
     to_dict,
 )
-from .query_builder import append_limit_offset, compile_order_by, compile_where
+from ..query_builder import append_limit_offset, compile_order_by, compile_where
 
 
 async def insert(repo: Any, obj: Any) -> Any:

@@ -7,7 +7,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any, get_args, get_origin
 
-from .contracts import DialectPort
+from ..contracts import DialectPort
 from .schema_foreign_keys import parse_fk_reference
 
 

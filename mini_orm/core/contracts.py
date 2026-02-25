@@ -6,9 +6,9 @@ from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from typing import Any, List, Mapping, Optional, Protocol, Sequence
 
 from .types import MaybeRow, QueryParams, RowMapping
-from .vector_metrics import VectorMetric, VectorMetricInput
-from .vector_policies import VectorIdPolicy
-from .vector_types import VectorRecord, VectorSearchResult
+from .vectors.vector_metrics import VectorMetric, VectorMetricInput
+from .vectors.vector_policies import VectorIdPolicy
+from .vectors.vector_types import VectorRecord, VectorSearchResult
 
 
 class DialectPort(Protocol):

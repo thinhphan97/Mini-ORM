@@ -8,13 +8,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence
 
-from ...core.vector_metrics import (
+from ...core.vectors.vector_metrics import (
     VectorMetric,
     VectorMetricInput,
     normalize_vector_metric,
 )
-from ...core.vector_policies import VectorIdPolicy
-from ...core.vector_types import VectorRecord, VectorSearchResult
+from ...core.vectors.vector_policies import VectorIdPolicy
+from ...core.vectors.vector_types import VectorRecord, VectorSearchResult
 
 SUPPORTED_METRICS = {
     VectorMetric.COSINE,
