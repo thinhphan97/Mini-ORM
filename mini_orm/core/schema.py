@@ -224,8 +224,7 @@ async def ensure_schema_async(
 
 def _recreate_schema(db: DatabasePort, cls: Type[DataclassModel]) -> list[str]:
     table = table_name(cls)
-    table_sql = db.dialect.q(table)
-    drop_sql = f"DROP TABLE {table_sql};"
+    drop_sql = _drop_table_sql(db.dialect, table)
     statements = [drop_sql, *create_schema_sql(cls, db.dialect, if_not_exists=False)]
     with db.transaction():
         for sql in statements:
@@ -237,8 +236,7 @@ async def _recreate_schema_async(
     db: AsyncDatabasePort, cls: Type[DataclassModel]
 ) -> list[str]:
     table = table_name(cls)
-    table_sql = db.dialect.q(table)
-    drop_sql = f"DROP TABLE {table_sql};"
+    drop_sql = _drop_table_sql(db.dialect, table)
     statements = [drop_sql, *create_schema_sql(cls, db.dialect, if_not_exists=False)]
     async with db.transaction():
         for sql in statements:
@@ -689,6 +687,13 @@ def _drop_index_sql(dialect: DialectPort, table: str, index_name: str) -> str:
     return f"DROP INDEX {index_sql};"
 
 
+def _drop_table_sql(dialect: DialectPort, table: str) -> str:
+    table_sql = dialect.q(table)
+    if getattr(dialect, "name", "").lower() == "postgres":
+        return f"DROP TABLE {table_sql} CASCADE;"
+    return f"DROP TABLE {table_sql};"
+
+
 def _type_tokens(raw: Any) -> tuple[str, ...]:
     text = (
         str(raw or "")
@@ -762,10 +767,24 @@ def _types_compatible(expected: str, current: str) -> bool:
         if expected_normalized in compatible and current_normalized in compatible:
             return True
 
-    expected_tokens = set(_type_tokens(expected))
-    current_tokens = set(_type_tokens(current))
+    expected_tokens = list(_type_tokens(expected))
+    current_tokens = list(_type_tokens(current))
     if expected_tokens and current_tokens:
-        if expected_tokens <= current_tokens or current_tokens <= expected_tokens:
+        if expected_tokens[0] == current_tokens[0]:
+            expected_suffix = set(expected_tokens[1:])
+            current_suffix = set(current_tokens[1:])
+            if expected_suffix <= current_suffix or current_suffix <= expected_suffix:
+                return True
+
+        expected_token_set = set(expected_tokens)
+        current_token_set = set(current_tokens)
+        if (
+            expected_tokens[0] == current_tokens[0]
+            and (
+                expected_token_set <= current_token_set
+                or current_token_set <= expected_token_set
+            )
+        ):
             return True
 
         known_markers = {
@@ -789,8 +808,8 @@ def _types_compatible(expected: str, current: str) -> bool:
             "BYTEA",
             "JSON",
         }
-        expected_markers = expected_tokens & known_markers
-        current_markers = current_tokens & known_markers
+        expected_markers = set(expected_tokens) & known_markers
+        current_markers = set(current_tokens) & known_markers
         if expected_markers and expected_markers == current_markers:
             return True
 

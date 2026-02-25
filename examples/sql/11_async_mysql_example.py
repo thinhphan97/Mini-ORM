@@ -138,10 +138,10 @@ async def main() -> None:
         print("MySQL async example skipped:", exc)
         return
 
-    db = AsyncDatabase(conn, MySQLDialect())
-    repo = AsyncRepository[User](db, User, auto_schema=True)
-
     try:
+        db = AsyncDatabase(conn, MySQLDialect())
+        repo = AsyncRepository[User](db, User, auto_schema=True)
+
         async with db.transaction():
             await db.execute("DROP TABLE IF EXISTS `user`;")
 
