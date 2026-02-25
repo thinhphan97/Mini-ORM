@@ -5,6 +5,7 @@ Lightweight Python ORM-style toolkit
 ## What it supports
 
 - Dataclass-based SQL models.
+- Optional pydantic-like dataclass input validation via `ValidatedModel`.
 - Single-table CRUD via `Repository[T]`.
 - Multi-table routing via one hub object: `UnifiedRepository`
   (model-class routing, with object-only mutation support).
@@ -112,8 +113,8 @@ Registration helpers (different signatures by repository type):
   - `repo.register_many(*, ensure=None)` / `await repo.register_many(*, ensure=None)`
   - `register_many` is an intentional single-model alias for API consistency and
     delegates to `register(ensure=...)` internally
-    (`mini_orm.core.repository.Repository.register_many` and
-    `mini_orm.core.repository_async.AsyncRepository.register_many`).
+    (`mini_orm.core.repositories.repository.Repository.register_many` and
+    `mini_orm.core.repositories.repository_async.AsyncRepository.register_many`).
 - `UnifiedRepository` / `AsyncUnifiedRepository` (model is passed per call):
   - `hub.register(model, ensure=None)` / `await hub.register(model, ensure=None)`
   - `hub.register_many([ModelA, ModelB], ensure=None)` / async equivalent
@@ -258,6 +259,25 @@ assert loaded.tags == ["orm"]
 
 Runnable example:
 - `examples/sql/08_codec_serialize_deserialize.py`
+
+## Dataclass Input Validation (Pydantic-like Basics)
+
+```python
+from dataclasses import dataclass, field
+from mini_orm import ValidatedModel, ValidationError
+
+@dataclass
+class CreateUserInput(ValidatedModel):
+    email: str = field(default="", metadata={"non_empty": True, "pattern": r"[^@]+@[^@]+\\.[^@]+"})
+    age: int = field(default=0, metadata={"ge": 0, "le": 130})
+
+payload = CreateUserInput(email="alice@example.com", age=20)  # ok
+
+try:
+    CreateUserInput(email="bad-email", age=-1)
+except ValidationError as exc:
+    print(exc)
+```
 
 ## Quick usage (Vector)
 
