@@ -16,7 +16,7 @@ PROJECT_ROOT = next(
 if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from mini_orm import C, Database, OrderBy, Repository, SQLiteDialect, apply_schema
+from mini_orm import C, Database, OrderBy, Repository, SQLiteDialect
 
 
 @dataclass
@@ -43,13 +43,10 @@ def main() -> None:
     conn = sqlite3.connect(":memory:")
     conn.execute("PRAGMA foreign_keys = ON;")
     db = Database(conn, SQLiteDialect())
-    author_repo = Repository[Author](db, Author)
-    post_repo = Repository[Post](db, Post)
+    author_repo = Repository[Author](db, Author, auto_schema=True)
+    post_repo = Repository[Post](db, Post, auto_schema=True)
 
     try:
-        apply_schema(db, Author)
-        apply_schema(db, Post)
-
         # 1) Create author with related posts in one call (has_many).
         alice = Author(name="Alice")
         author_repo.create(

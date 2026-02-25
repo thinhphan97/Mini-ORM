@@ -14,13 +14,15 @@ from .models import (
     to_dict,
 )
 from .query_builder import WhereInput
-from .repository import RelatedResult, Repository
-from .repository_async import AsyncRepository
+from .repository import RelatedResult, Repository, UnifiedRepository
+from .repository_async import AsyncRepository, AsyncUnifiedRepository
 from .repository_relations_async import AsyncRelatedResult
 from .schema import (
     IndexSpec,
     apply_schema,
     apply_schema_async,
+    ensure_schema,
+    ensure_schema_async,
     create_index_sql,
     create_indexes_sql,
     create_schema_sql,
@@ -49,7 +51,9 @@ __all__ = [
     "RelationSpec",
     "RelationType",
     "Repository",
+    "UnifiedRepository",
     "AsyncRepository",
+    "AsyncUnifiedRepository",
     "RelatedResult",
     "AsyncRelatedResult",
     "VectorMetric",
@@ -65,6 +69,8 @@ __all__ = [
     "IndexSpec",
     "apply_schema",
     "apply_schema_async",
+    "ensure_schema",
+    "ensure_schema_async",
     "auto_pk_field",
     "create_index_sql",
     "create_indexes_sql",

@@ -17,6 +17,8 @@ python examples/sql/08_codec_serialize_deserialize.py
 python examples/sql/09_async_basic_crud.py
 python examples/sql/10_async_postgres_example.py
 python examples/sql/11_async_mysql_example.py
+python examples/sql/12_unified_repository.py
+python examples/sql/13_async_unified_repository.py
 
 python examples/vector/01_inmemory_basic.py
 python examples/vector/02_inmemory_metrics_and_filters.py
@@ -69,6 +71,7 @@ python examples/vector/11_async_faiss_example.py
     - parent side `Author.posts` (`has_many`)
   - Create parent/child graph in one call via `repo.create(..., relations=...)`.
   - Query rows with included relations via `get_related(...)` and `list_related(...)`.
+  - Uses `auto_schema=True` for convenient schema bootstrap.
 
 - `examples/sql/08_codec_serialize_deserialize.py`
   - Enum and JSON codec flow for repository input/output.
@@ -77,15 +80,26 @@ python examples/vector/11_async_faiss_example.py
 
 - `examples/sql/09_async_basic_crud.py`
   - Async API with same method names as sync (`insert/get/list/update/delete`).
-  - Uses `AsyncDatabase`, `AsyncRepository`, and `apply_schema_async`.
+  - Uses `AsyncDatabase` + `AsyncRepository(auto_schema=True)`.
 
 - `examples/sql/10_async_postgres_example.py`
   - Async SQL flow with `PostgresDialect` + `AsyncRepository`.
+  - Uses `auto_schema=True` (no explicit `apply_schema_async` call).
   - Optional dependency/server script (safe skip when `psycopg` or server is missing).
 
 - `examples/sql/11_async_mysql_example.py`
   - Async SQL flow with `MySQLDialect` + `AsyncRepository`.
+  - Uses `auto_schema=True` (no explicit `apply_schema_async` call).
   - Optional dependency/server script (safe skip when mysql driver or server is missing).
+
+- `examples/sql/12_unified_repository.py`
+  - One `UnifiedRepository` hub object routes CRUD/relations across multiple model classes.
+  - Uses `auto_schema=True` and `require_registration=True` with `register_many(...)`.
+
+- `examples/sql/13_async_unified_repository.py`
+  - Async equivalent with `AsyncUnifiedRepository`.
+  - Mutation methods infer model from object; query methods still pass model class.
+  - Uses `auto_schema=True` and `require_registration=True` with `await register_many(...)`.
 
 ## Vector examples
 

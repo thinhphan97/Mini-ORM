@@ -23,14 +23,23 @@ class Database:
         self.conn = conn
         self.dialect = dialect
 
+    def _should_begin_sqlite_transaction(self) -> bool:
+        if getattr(self.dialect, "name", "").lower() != "sqlite":
+            return False
+        if getattr(self.conn, "isolation_level", None) is not None:
+            return False
+        return not bool(getattr(self.conn, "in_transaction", False))
+
     @contextlib.contextmanager
     def transaction(self):
         """Provide commit/rollback transaction scope."""
 
         try:
+            if self._should_begin_sqlite_transaction():
+                self.conn.execute("BEGIN")
             yield
             self.conn.commit()
-        except Exception:
+        except BaseException:
             self.conn.rollback()
             raise
 

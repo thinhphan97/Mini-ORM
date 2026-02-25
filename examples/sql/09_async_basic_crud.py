@@ -15,7 +15,7 @@ PROJECT_ROOT = next(
 if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from mini_orm import C, AsyncDatabase, AsyncRepository, SQLiteDialect, apply_schema_async
+from mini_orm import C, AsyncDatabase, AsyncRepository, SQLiteDialect
 
 
 @dataclass
@@ -29,9 +29,7 @@ async def main() -> None:
     conn = sqlite3.connect(":memory:")
     try:
         db = AsyncDatabase(conn, SQLiteDialect())
-        await apply_schema_async(db, User)
-
-        repo = AsyncRepository[User](db, User)
+        repo = AsyncRepository[User](db, User, auto_schema=True)
 
         alice = await repo.insert(User(email="alice@example.com", age=20))
         print("inserted:", alice)

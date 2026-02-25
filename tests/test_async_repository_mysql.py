@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from mini_orm import (
+    AsyncUnifiedRepository,
     C,
     AsyncDatabase,
     AsyncRepository,
@@ -64,6 +65,25 @@ class AsyncMySQLCodecTicket:
     status: AsyncMySQLCodecStatus = AsyncMySQLCodecStatus.OPEN
     payload: dict[str, Any] = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
+
+
+@dataclass
+class AsyncMySQLAutoSchemaUserV1:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
+
+
+AsyncMySQLAutoSchemaUserV1.__table__ = "asyncmysqlautoschemauser"
+
+
+@dataclass
+class AsyncMySQLAutoSchemaUserV2:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
+    age: Optional[int] = None
+
+
+AsyncMySQLAutoSchemaUserV2.__table__ = "asyncmysqlautoschemauser"
 
 
 AsyncMySQLDialectAuthor.__relations__ = {
@@ -186,6 +206,7 @@ class AsyncRepositoryMySQLDialectTests(unittest.IsolatedAsyncioTestCase):
             await self.db.execute("DROP TABLE IF EXISTS `asyncmysqldialectpost`;")
             await self.db.execute("DROP TABLE IF EXISTS `asyncmysqldialectauthor`;")
             await self.db.execute("DROP TABLE IF EXISTS `asyncmysqldialectuser`;")
+            await self.db.execute("DROP TABLE IF EXISTS `asyncmysqlautoschemauser`;")
         await apply_schema_async(self.db, AsyncMySQLDialectUser)
         await apply_schema_async(self.db, AsyncMySQLDialectAuthor)
         await apply_schema_async(self.db, AsyncMySQLDialectPost)
@@ -244,6 +265,82 @@ class AsyncRepositoryMySQLDialectTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.post_repo.count(), 2)
         loaded_posts = await self.post_repo.list(order_by=[OrderBy("id")])
         self.assertTrue(all(post.author_id == author.id for post in loaded_posts))
+
+    async def test_async_unified_repository_reuses_cached_repositories(self) -> None:
+        unified = AsyncUnifiedRepository(self.db)
+
+        user_repo_1 = unified.repo(AsyncMySQLDialectUser)
+        user_repo_2 = unified.repo(AsyncMySQLDialectUser)
+        author_repo = unified.repo(AsyncMySQLDialectAuthor)
+
+        self.assertIs(user_repo_1, user_repo_2)
+        self.assertIsNot(user_repo_1, author_repo)
+
+    async def test_async_unified_repository_crud_and_relations(self) -> None:
+        unified = AsyncUnifiedRepository(self.db)
+
+        async with self.db.transaction():
+            user = await unified.insert(
+                AsyncMySQLDialectUser,
+                AsyncMySQLDialectUser(email="hub@example.com", age=20),
+            )
+        self.assertIsNotNone(user.id)
+        self.assertEqual(await unified.count(AsyncMySQLDialectUser), 1)
+
+        loaded = await unified.get(AsyncMySQLDialectUser, user.id)
+        self.assertIsNotNone(loaded)
+        if loaded is None:
+            self.fail("Expected inserted row to exist.")
+
+        loaded.age = 21
+        async with self.db.transaction():
+            self.assertEqual(await unified.update(AsyncMySQLDialectUser, loaded), 1)
+        async with self.db.transaction():
+            self.assertEqual(await unified.delete(AsyncMySQLDialectUser, loaded), 1)
+        self.assertEqual(await unified.count(AsyncMySQLDialectUser), 0)
+
+        author = await unified.create(
+            AsyncMySQLDialectAuthor,
+            AsyncMySQLDialectAuthor(name="Unified Reader"),
+            relations={
+                "posts": [AsyncMySQLDialectPost(title="T1"), AsyncMySQLDialectPost(title="T2")]
+            },
+        )
+        self.assertIsNotNone(author.id)
+        if author.id is None:
+            self.fail("Expected author auto PK.")
+
+        author_with_posts = await unified.get_related(
+            AsyncMySQLDialectAuthor,
+            author.id,
+            include=["posts"],
+        )
+        self.assertIsNotNone(author_with_posts)
+        if author_with_posts is None:
+            self.fail("Expected related result for existing author.")
+        self.assertEqual(len(author_with_posts.relations["posts"]), 2)
+
+    async def test_async_repository_auto_schema_additive_for_mysql(self) -> None:
+        repo_v1 = AsyncRepository(self.db, AsyncMySQLAutoSchemaUserV1, auto_schema=True)
+        async with self.db.transaction():
+            await repo_v1.insert(AsyncMySQLAutoSchemaUserV1(email="a@example.com"))
+
+        repo_v2 = AsyncRepository(self.db, AsyncMySQLAutoSchemaUserV2, auto_schema=True)
+        async with self.db.transaction():
+            await repo_v2.insert(AsyncMySQLAutoSchemaUserV2(email="b@example.com", age=20))
+        self.assertEqual(await repo_v2.count(), 2)
+
+    async def test_async_unified_repository_auto_schema_additive_for_mysql(self) -> None:
+        unified = AsyncUnifiedRepository(self.db, auto_schema=True)
+        await unified.insert(
+            AsyncMySQLAutoSchemaUserV1,
+            AsyncMySQLAutoSchemaUserV1(email="a@example.com"),
+        )
+        await unified.insert(
+            AsyncMySQLAutoSchemaUserV2,
+            AsyncMySQLAutoSchemaUserV2(email="b@example.com", age=20),
+        )
+        self.assertEqual(await unified.count(AsyncMySQLAutoSchemaUserV2), 2)
 
     async def test_get_related_and_list_related(self) -> None:
         author = await self.author_repo.create(

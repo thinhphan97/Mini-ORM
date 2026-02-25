@@ -29,6 +29,7 @@ class AsyncRelationCoordinator(Generic[T]):
 
     def __init__(self, repo: "AsyncRepository[T]") -> None:
         self.repo = repo
+        self._repo_cache: dict[type[DataclassModel], Any] = {}
 
     async def create(self, obj: T, *, relations: Mapping[str, Any] | None = None) -> T:
         """Create one object and optionally create/link related records."""
@@ -227,8 +228,21 @@ class AsyncRelationCoordinator(Generic[T]):
             results[index][relation_name] = mapped.get(key)
 
     def _new_repo(self, model: type[DataclassModel]) -> Any:
+        cached = self._repo_cache.get(model)
+        if cached is not None:
+            return cached
+
         repo_type = type(self.repo)
-        return repo_type(self.repo.db, model)
+        created = repo_type(
+            self.repo.db,
+            model,
+            auto_schema=getattr(self.repo, "_auto_schema", False),
+            schema_conflict=getattr(self.repo, "_schema_conflict", "raise"),
+            require_registration=getattr(self.repo, "_require_registration", False),
+            registry=getattr(self.repo, "_registry", None),
+        )
+        self._repo_cache[model] = created
+        return created
 
     def _relation_spec(self, relation_name: str) -> RelationSpec:
         spec = self.repo.meta.relations.get(relation_name)

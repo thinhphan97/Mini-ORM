@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
-from mini_orm import C, Database, OrderBy, Repository, SQLiteDialect, apply_schema
+from mini_orm import C, Database, OrderBy, Repository, SQLiteDialect, UnifiedRepository, apply_schema
 from mini_orm.ports.db_api.dialects import Dialect
 
 
@@ -99,6 +99,34 @@ class TicketRow:
     tags: list[str] = field(default_factory=list)
 
 
+@dataclass
+class AutoSchemaUserV1:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
+
+
+AutoSchemaUserV1.__table__ = "autoschema_user"
+
+
+@dataclass
+class AutoSchemaUserV2:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
+    age: Optional[int] = None
+
+
+AutoSchemaUserV2.__table__ = "autoschema_user"
+
+
+@dataclass
+class AutoSchemaUserIncompatible:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: int = 0
+
+
+AutoSchemaUserIncompatible.__table__ = "autoschema_user"
+
+
 class PlainModel:
     pass
 
@@ -163,11 +191,297 @@ class RepositorySQLiteTests(unittest.TestCase):
         apply_schema(db, PostRow)
         return conn, Repository[AuthorRow](db, AuthorRow), Repository[PostRow](db, PostRow)
 
+    def test_unified_repository_reuses_cached_repositories(self) -> None:
+        unified = UnifiedRepository(self.db)
+
+        user_repo_1 = unified.repo(UserRow)
+        user_repo_2 = unified.repo(UserRow)
+        author_repo = unified.repo(AuthorRow)
+
+        self.assertIs(user_repo_1, user_repo_2)
+        self.assertIsNot(user_repo_1, author_repo)
+
+    def test_unified_repository_crud_and_relations(self) -> None:
+        unified = UnifiedRepository(self.db)
+        inserted = unified.insert(UserRow, UserRow(email="hub@example.com", age=20))
+        self.assertIsNotNone(inserted.id)
+        self.assertEqual(unified.count(UserRow), 1)
+        self.assertTrue(unified.exists(UserRow, where=C.eq("email", "hub@example.com")))
+
+        loaded = unified.get(UserRow, inserted.id)
+        self.assertIsNotNone(loaded)
+        if loaded is None:
+            self.fail("Expected inserted row to exist.")
+
+        loaded.age = 21
+        self.assertEqual(unified.update(UserRow, loaded), 1)
+        self.assertEqual(unified.delete(UserRow, loaded), 1)
+        self.assertEqual(unified.count(UserRow), 0)
+
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = Database(conn, SQLiteDialect())
+        apply_schema(db, AuthorRow)
+        apply_schema(db, PostRow)
+        relation_unified = UnifiedRepository(db)
+
+        author = relation_unified.create(
+            AuthorRow,
+            AuthorRow(name="alice"),
+            relations={"posts": [PostRow(title="p1"), PostRow(title="p2")]},
+        )
+        self.assertIsNotNone(author.id)
+        if author.id is None:
+            self.fail("Expected author to get auto PK.")
+
+        author_with_posts = relation_unified.get_related(
+            AuthorRow,
+            author.id,
+            include=["posts"],
+        )
+        self.assertIsNotNone(author_with_posts)
+        if author_with_posts is None:
+            self.fail("Expected related result for existing author.")
+        self.assertEqual(len(author_with_posts.relations["posts"]), 2)
+
+        posts_with_author = relation_unified.list_related(
+            PostRow,
+            include=["author"],
+            order_by=[OrderBy("id")],
+        )
+        self.assertEqual(len(posts_with_author), 2)
+        self.assertTrue(all(item.relations["author"] is not None for item in posts_with_author))
+
+    def test_unified_repository_accepts_object_only_for_mutations(self) -> None:
+        unified = UnifiedRepository(self.db)
+        inserted = unified.insert(UserRow(email="object@example.com", age=20))
+        self.assertIsNotNone(inserted.id)
+
+        loaded = unified.get(UserRow, inserted.id)
+        self.assertIsNotNone(loaded)
+        if loaded is None:
+            self.fail("Expected inserted row to exist.")
+
+        loaded.age = 21
+        self.assertEqual(unified.update(loaded), 1)
+        self.assertEqual(unified.delete(loaded), 1)
+
+        inserted_many = unified.insert_many(
+            [
+                UserRow(email="m1@example.com"),
+                UserRow(email="m2@example.com"),
+            ]
+        )
+        self.assertEqual(len(inserted_many), 2)
+
+    def test_unified_repository_auto_schema_modes(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = Database(conn, SQLiteDialect())
+        unified = UnifiedRepository(db, auto_schema=True)
+        unified.insert(AutoSchemaUserV1, AutoSchemaUserV1(email="a@example.com"))
+
+        # Additive model change should auto-sync.
+        unified_v2 = UnifiedRepository(db, auto_schema=True)
+        unified_v2.insert(
+            AutoSchemaUserV2,
+            AutoSchemaUserV2(email="b@example.com", age=20),
+        )
+        self.assertEqual(unified_v2.count(AutoSchemaUserV2), 2)
+
+        with self.assertRaises(ValueError):
+            UnifiedRepository(
+                db,
+                auto_schema=True,
+                schema_conflict="raise",
+            ).count(AutoSchemaUserIncompatible)
+
+        recreated = UnifiedRepository(
+            db,
+            auto_schema=True,
+            schema_conflict="recreate",
+        )
+        self.assertEqual(recreated.count(AutoSchemaUserIncompatible), 0)
+        recreated_row = recreated.insert(
+            AutoSchemaUserIncompatible,
+            AutoSchemaUserIncompatible(email=123),
+        )
+        self.assertIsNotNone(recreated_row.id)
+        if recreated_row.id is None:
+            self.fail("Expected inserted row id after recreate.")
+        recreated_loaded = recreated.get(AutoSchemaUserIncompatible, recreated_row.id)
+        self.assertIsNotNone(recreated_loaded)
+        if recreated_loaded is None:
+            self.fail("Expected recreated schema row to be readable.")
+        self.assertEqual(recreated_loaded.email, 123)
+
+    def test_unified_repository_auto_schema_relations_create_child_tables(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = Database(conn, SQLiteDialect())
+        unified = UnifiedRepository(db, auto_schema=True)
+
+        author = unified.create(
+            AuthorRow,
+            AuthorRow(name="auto"),
+            relations={"posts": [PostRow(title="p1"), PostRow(title="p2")]},
+        )
+        self.assertIsNotNone(author.id)
+        self.assertEqual(unified.count(PostRow), 2)
+
+    def test_unified_repository_require_registration(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = Database(conn, SQLiteDialect())
+        unified = UnifiedRepository(
+            db,
+            auto_schema=True,
+            require_registration=True,
+        )
+
+        with self.assertRaisesRegex(ValueError, "not registered"):
+            unified.insert(UserRow, UserRow(email="u@example.com"))
+
+        unified.register(UserRow)
+        inserted = unified.insert(UserRow, UserRow(email="u@example.com"))
+        self.assertIsNotNone(inserted.id)
+        self.assertEqual(unified.count(UserRow), 1)
+
+        unified_no_ensure = UnifiedRepository(
+            db,
+            auto_schema=True,
+            require_registration=True,
+        )
+        unified_no_ensure.register(UserRow, ensure=False)
+        inserted2 = unified_no_ensure.insert(UserRow, UserRow(email="u2@example.com"))
+        self.assertIsNotNone(inserted2.id)
+
+    def test_unified_repository_auto_registers_on_first_action(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = Database(conn, SQLiteDialect())
+        unified = UnifiedRepository(db, auto_schema=True)
+        self.assertFalse(unified.repo(UserRow).is_registered())
+        inserted = unified.insert(UserRow, UserRow(email="u@example.com"))
+        self.assertIsNotNone(inserted.id)
+        self.assertEqual(unified.count(UserRow), 1)
+        self.assertTrue(unified.repo(UserRow).is_registered())
+
+    def test_unified_repository_relations_require_registered_child_model(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = Database(conn, SQLiteDialect())
+        unified = UnifiedRepository(
+            db,
+            auto_schema=True,
+            require_registration=True,
+        )
+        unified.register(AuthorRow)
+
+        with self.assertRaisesRegex(ValueError, "not registered"):
+            unified.create(
+                AuthorRow,
+                AuthorRow(name="alice"),
+                relations={"posts": [PostRow(title="p1")]},
+            )
+        self.assertEqual(unified.count(AuthorRow), 0)
+
+        unified.register(PostRow)
+        author = unified.create(
+            AuthorRow,
+            AuthorRow(name="alice"),
+            relations={"posts": [PostRow(title="p1"), PostRow(title="p2")]},
+        )
+        self.assertIsNotNone(author.id)
+        self.assertEqual(unified.count(PostRow), 2)
+
     def test_insert_assigns_auto_pk(self) -> None:
         user = UserRow(email="new@example.com", age=20)
         inserted = self.repo.insert(user)
         self.assertIsNotNone(inserted.id)
         self.assertEqual(inserted.email, "new@example.com")
+
+    def test_repository_auto_schema_creates_and_updates_schema(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = Database(conn, SQLiteDialect())
+
+        repo_v1 = Repository(db, AutoSchemaUserV1, auto_schema=True)
+        repo_v1.insert(AutoSchemaUserV1(email="a@example.com"))
+
+        # Same model config should be a no-op.
+        Repository(db, AutoSchemaUserV1, auto_schema=True)
+
+        # Additive change: new nullable column should be added automatically.
+        repo_v2 = Repository(db, AutoSchemaUserV2, auto_schema=True)
+        inserted = repo_v2.insert(AutoSchemaUserV2(email="b@example.com", age=20))
+        self.assertIsNotNone(inserted.id)
+        self.assertEqual(repo_v2.count(), 2)
+
+    def test_repository_auto_schema_conflict_modes(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = Database(conn, SQLiteDialect())
+
+        Repository(db, AutoSchemaUserV1, auto_schema=True).insert(
+            AutoSchemaUserV1(email="a@example.com")
+        )
+
+        with self.assertRaises(ValueError):
+            Repository(
+                db,
+                AutoSchemaUserIncompatible,
+                auto_schema=True,
+                schema_conflict="raise",
+            ).count()
+
+        recreated = Repository(
+            db,
+            AutoSchemaUserIncompatible,
+            auto_schema=True,
+            schema_conflict="recreate",
+        )
+        self.assertEqual(recreated.count(), 0)
+
+    def test_repository_require_registration(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = Database(conn, SQLiteDialect())
+        repo = Repository(
+            db,
+            UserRow,
+            auto_schema=True,
+            require_registration=True,
+        )
+
+        with self.assertRaisesRegex(ValueError, "not registered"):
+            repo.insert(UserRow(email="x@example.com"))
+
+        repo.register()
+        inserted = repo.insert(UserRow(email="x@example.com"))
+        self.assertIsNotNone(inserted.id)
+        self.assertEqual(repo.count(), 1)
+
+        repo2 = Repository(
+            db,
+            UserRow,
+            auto_schema=True,
+            require_registration=True,
+        )
+        repo2.register(ensure=False)
+        inserted2 = repo2.insert(UserRow(email="x2@example.com"))
+        self.assertIsNotNone(inserted2.id)
+
+    def test_repository_auto_registers_on_first_action(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = Database(conn, SQLiteDialect())
+        repo = Repository(db, UserRow, auto_schema=True)
+        self.assertFalse(repo.is_registered())
+        inserted = repo.insert(UserRow(email="x@example.com"))
+        self.assertIsNotNone(inserted.id)
+        self.assertEqual(repo.count(), 1)
+        self.assertTrue(repo.is_registered())
 
     def test_insert_uses_lastrowid_when_returning_is_not_supported(self) -> None:
         fake_db = _NoReturningDb()

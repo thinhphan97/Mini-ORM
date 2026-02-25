@@ -11,6 +11,7 @@ from mini_orm import (
     C,
     AsyncDatabase,
     AsyncRepository,
+    AsyncUnifiedRepository,
     OrderBy,
     SQLiteDialect,
     apply_schema_async,
@@ -93,6 +94,34 @@ class TicketRow:
     status: TicketStatus = TicketStatus.OPEN
     payload: dict[str, Any] = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
+
+
+@dataclass
+class AsyncAutoSchemaUserV1:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
+
+
+AsyncAutoSchemaUserV1.__table__ = "async_autoschema_user"
+
+
+@dataclass
+class AsyncAutoSchemaUserV2:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: str = ""
+    age: Optional[int] = None
+
+
+AsyncAutoSchemaUserV2.__table__ = "async_autoschema_user"
+
+
+@dataclass
+class AsyncAutoSchemaUserIncompatible:
+    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
+    email: int = 0
+
+
+AsyncAutoSchemaUserIncompatible.__table__ = "async_autoschema_user"
 
 
 class PlainModel:
@@ -198,6 +227,207 @@ class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):
         await apply_schema_async(db, PostRow)
         return conn, AsyncRepository[AuthorRow](db, AuthorRow), AsyncRepository[PostRow](db, PostRow)
 
+    async def test_async_unified_repository_reuses_cached_repositories(self) -> None:
+        unified = AsyncUnifiedRepository(self.db)
+
+        user_repo_1 = unified.repo(UserRow)
+        user_repo_2 = unified.repo(UserRow)
+        author_repo = unified.repo(AuthorRow)
+
+        self.assertIs(user_repo_1, user_repo_2)
+        self.assertIsNot(user_repo_1, author_repo)
+
+    async def test_async_unified_repository_crud_and_relations(self) -> None:
+        unified = AsyncUnifiedRepository(self.db)
+        inserted = await unified.insert(UserRow, UserRow(email="hub@example.com", age=20))
+        self.assertIsNotNone(inserted.id)
+        self.assertEqual(await unified.count(UserRow), 1)
+        self.assertTrue(await unified.exists(UserRow, where=C.eq("email", "hub@example.com")))
+
+        loaded = await unified.get(UserRow, inserted.id)
+        self.assertIsNotNone(loaded)
+        if loaded is None:
+            self.fail("Expected inserted row to exist.")
+
+        loaded.age = 21
+        self.assertEqual(await unified.update(UserRow, loaded), 1)
+        self.assertEqual(await unified.delete(UserRow, loaded), 1)
+        self.assertEqual(await unified.count(UserRow), 0)
+
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = AsyncDatabase(conn, SQLiteDialect())
+        await apply_schema_async(db, AuthorRow)
+        await apply_schema_async(db, PostRow)
+        relation_unified = AsyncUnifiedRepository(db)
+
+        author = await relation_unified.create(
+            AuthorRow,
+            AuthorRow(name="alice"),
+            relations={"posts": [PostRow(title="p1"), PostRow(title="p2")]},
+        )
+        self.assertIsNotNone(author.id)
+        if author.id is None:
+            self.fail("Expected author to get auto PK.")
+
+        author_with_posts = await relation_unified.get_related(
+            AuthorRow,
+            author.id,
+            include=["posts"],
+        )
+        self.assertIsNotNone(author_with_posts)
+        if author_with_posts is None:
+            self.fail("Expected related result for existing author.")
+        self.assertEqual(len(author_with_posts.relations["posts"]), 2)
+
+        posts_with_author = await relation_unified.list_related(
+            PostRow,
+            include=["author"],
+            order_by=[OrderBy("id")],
+        )
+        self.assertEqual(len(posts_with_author), 2)
+        self.assertTrue(all(item.relations["author"] is not None for item in posts_with_author))
+
+    async def test_async_unified_repository_accepts_object_only_for_mutations(self) -> None:
+        unified = AsyncUnifiedRepository(self.db)
+        inserted = await unified.insert(UserRow(email="object@example.com", age=20))
+        self.assertIsNotNone(inserted.id)
+
+        loaded = await unified.get(UserRow, inserted.id)
+        self.assertIsNotNone(loaded)
+        if loaded is None:
+            self.fail("Expected inserted row to exist.")
+
+        loaded.age = 21
+        self.assertEqual(await unified.update(loaded), 1)
+        self.assertEqual(await unified.delete(loaded), 1)
+
+        inserted_many = await unified.insert_many(
+            [
+                UserRow(email="m1@example.com"),
+                UserRow(email="m2@example.com"),
+            ]
+        )
+        self.assertEqual(len(inserted_many), 2)
+
+    async def test_async_unified_repository_auto_schema_modes(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = AsyncDatabase(conn, SQLiteDialect())
+        unified = AsyncUnifiedRepository(db, auto_schema=True)
+        await unified.insert(
+            AsyncAutoSchemaUserV1,
+            AsyncAutoSchemaUserV1(email="a@example.com"),
+        )
+
+        # Additive model change should auto-sync.
+        unified_v2 = AsyncUnifiedRepository(db, auto_schema=True)
+        await unified_v2.insert(
+            AsyncAutoSchemaUserV2,
+            AsyncAutoSchemaUserV2(email="b@example.com", age=20),
+        )
+        self.assertEqual(await unified_v2.count(AsyncAutoSchemaUserV2), 2)
+
+        with self.assertRaises(ValueError):
+            await AsyncUnifiedRepository(
+                db,
+                auto_schema=True,
+                schema_conflict="raise",
+            ).count(AsyncAutoSchemaUserIncompatible)
+
+        recreated = AsyncUnifiedRepository(
+            db,
+            auto_schema=True,
+            schema_conflict="recreate",
+        )
+        self.assertEqual(await recreated.count(AsyncAutoSchemaUserIncompatible), 0)
+
+    async def test_async_unified_repository_auto_schema_relations_create_child_tables(
+        self,
+    ) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = AsyncDatabase(conn, SQLiteDialect())
+        unified = AsyncUnifiedRepository(db, auto_schema=True)
+
+        author = await unified.create(
+            AuthorRow,
+            AuthorRow(name="auto"),
+            relations={"posts": [PostRow(title="p1"), PostRow(title="p2")]},
+        )
+        self.assertIsNotNone(author.id)
+        self.assertEqual(await unified.count(PostRow), 2)
+
+    async def test_async_unified_repository_require_registration(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = AsyncDatabase(conn, SQLiteDialect())
+        unified = AsyncUnifiedRepository(
+            db,
+            auto_schema=True,
+            require_registration=True,
+        )
+
+        with self.assertRaisesRegex(ValueError, "not registered"):
+            await unified.insert(UserRow, UserRow(email="u@example.com"))
+
+        await unified.register(UserRow)
+        inserted = await unified.insert(UserRow, UserRow(email="u@example.com"))
+        self.assertIsNotNone(inserted.id)
+        self.assertEqual(await unified.count(UserRow), 1)
+
+        unified_no_ensure = AsyncUnifiedRepository(
+            db,
+            auto_schema=True,
+            require_registration=True,
+        )
+        await unified_no_ensure.register(UserRow, ensure=False)
+        inserted2 = await unified_no_ensure.insert(UserRow, UserRow(email="u2@example.com"))
+        self.assertIsNotNone(inserted2.id)
+
+    async def test_async_unified_repository_auto_registers_on_first_action(
+        self,
+    ) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = AsyncDatabase(conn, SQLiteDialect())
+        unified = AsyncUnifiedRepository(db, auto_schema=True)
+        self.assertFalse(unified.repo(UserRow).is_registered())
+        inserted = await unified.insert(UserRow, UserRow(email="u@example.com"))
+        self.assertIsNotNone(inserted.id)
+        self.assertEqual(await unified.count(UserRow), 1)
+        self.assertTrue(unified.repo(UserRow).is_registered())
+
+    async def test_async_unified_repository_relations_require_registered_child_model(
+        self,
+    ) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = AsyncDatabase(conn, SQLiteDialect())
+        unified = AsyncUnifiedRepository(
+            db,
+            auto_schema=True,
+            require_registration=True,
+        )
+        await unified.register(AuthorRow)
+
+        with self.assertRaisesRegex(ValueError, "not registered"):
+            await unified.create(
+                AuthorRow,
+                AuthorRow(name="alice"),
+                relations={"posts": [PostRow(title="p1")]},
+            )
+        self.assertEqual(await unified.count(AuthorRow), 0)
+
+        await unified.register(PostRow)
+        author = await unified.create(
+            AuthorRow,
+            AuthorRow(name="alice"),
+            relations={"posts": [PostRow(title="p1"), PostRow(title="p2")]},
+        )
+        self.assertIsNotNone(author.id)
+        self.assertEqual(await unified.count(PostRow), 2)
+
     async def test_async_repository_surface_matches_sync_names(self) -> None:
         method_names = [
             "insert",
@@ -241,6 +471,88 @@ class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):
         inserted = await self.repo.insert(user)
         self.assertIsNotNone(inserted.id)
         self.assertEqual(inserted.email, "new@example.com")
+
+    async def test_async_repository_auto_schema_creates_and_updates_schema(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = AsyncDatabase(conn, SQLiteDialect())
+
+        repo_v1 = AsyncRepository(db, AsyncAutoSchemaUserV1, auto_schema=True)
+        await repo_v1.insert(AsyncAutoSchemaUserV1(email="a@example.com"))
+
+        # Same model config should be a no-op.
+        await AsyncRepository(db, AsyncAutoSchemaUserV1, auto_schema=True).count()
+
+        # Additive change: new nullable column should be added automatically.
+        repo_v2 = AsyncRepository(db, AsyncAutoSchemaUserV2, auto_schema=True)
+        inserted = await repo_v2.insert(AsyncAutoSchemaUserV2(email="b@example.com", age=20))
+        self.assertIsNotNone(inserted.id)
+        self.assertEqual(await repo_v2.count(), 2)
+
+    async def test_async_repository_auto_schema_conflict_modes(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = AsyncDatabase(conn, SQLiteDialect())
+
+        await AsyncRepository(db, AsyncAutoSchemaUserV1, auto_schema=True).insert(
+            AsyncAutoSchemaUserV1(email="a@example.com")
+        )
+
+        with self.assertRaises(ValueError):
+            await AsyncRepository(
+                db,
+                AsyncAutoSchemaUserIncompatible,
+                auto_schema=True,
+                schema_conflict="raise",
+            ).count()
+
+        recreated = AsyncRepository(
+            db,
+            AsyncAutoSchemaUserIncompatible,
+            auto_schema=True,
+            schema_conflict="recreate",
+        )
+        self.assertEqual(await recreated.count(), 0)
+
+    async def test_async_repository_require_registration(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = AsyncDatabase(conn, SQLiteDialect())
+        repo = AsyncRepository(
+            db,
+            UserRow,
+            auto_schema=True,
+            require_registration=True,
+        )
+
+        with self.assertRaisesRegex(ValueError, "not registered"):
+            await repo.insert(UserRow(email="x@example.com"))
+
+        await repo.register()
+        inserted = await repo.insert(UserRow(email="x@example.com"))
+        self.assertIsNotNone(inserted.id)
+        self.assertEqual(await repo.count(), 1)
+
+        repo2 = AsyncRepository(
+            db,
+            UserRow,
+            auto_schema=True,
+            require_registration=True,
+        )
+        await repo2.register(ensure=False)
+        inserted2 = await repo2.insert(UserRow(email="x2@example.com"))
+        self.assertIsNotNone(inserted2.id)
+
+    async def test_async_repository_auto_registers_on_first_action(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        db = AsyncDatabase(conn, SQLiteDialect())
+        repo = AsyncRepository(db, UserRow, auto_schema=True)
+        self.assertFalse(repo.is_registered())
+        inserted = await repo.insert(UserRow(email="x@example.com"))
+        self.assertIsNotNone(inserted.id)
+        self.assertEqual(await repo.count(), 1)
+        self.assertTrue(repo.is_registered())
 
     async def test_update_and_delete(self) -> None:
         inserted = await self.repo.insert(UserRow(email="mutate@example.com", age=10))
