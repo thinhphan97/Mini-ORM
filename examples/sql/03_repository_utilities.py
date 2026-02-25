@@ -27,6 +27,10 @@ class Product:
     price: float = 0.0
     stock: int = 0
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.sku, str) or not self.sku.strip():
+            raise ValueError("sku must be a non-empty string.")
+
 
 def main() -> None:
     conn = sqlite3.connect(":memory:")
