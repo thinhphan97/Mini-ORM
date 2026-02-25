@@ -22,7 +22,7 @@ from mini_orm import C, Database, Repository, SQLiteDialect, apply_schema
 @dataclass
 class Product:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
-    sku: str = ""
+    sku: str = field(default="", metadata={"unique_index": True})
     category: str = ""
     price: float = 0.0
     stock: int = 0

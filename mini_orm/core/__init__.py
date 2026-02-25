@@ -14,10 +14,10 @@ from .models import (
     to_dict,
 )
 from .query_builder import WhereInput
-from .repository import RelatedResult, Repository, UnifiedRepository
-from .repository_async import AsyncRepository, AsyncUnifiedRepository
-from .repository_relations_async import AsyncRelatedResult
-from .schema import (
+from .repositories.repository import RelatedResult, Repository, UnifiedRepository
+from .repositories.repository_async import AsyncRepository, AsyncUnifiedRepository
+from .repositories.repository_relations_async import AsyncRelatedResult
+from .schemas.schema import (
     IndexSpec,
     apply_schema,
     apply_schema_async,
@@ -28,16 +28,16 @@ from .schema import (
     create_schema_sql,
     create_table_sql,
 )
-from .vector_metrics import VectorMetric, VectorMetricInput, normalize_vector_metric
-from .vector_policies import VectorIdPolicy
-from .vector_repository import VectorRepository
-from .vector_repository_async import AsyncVectorRepository
-from .vector_codecs import (
+from .vectors.vector_metrics import VectorMetric, VectorMetricInput, normalize_vector_metric
+from .vectors.vector_policies import VectorIdPolicy
+from .vectors.vector_repository import VectorRepository
+from .vectors.vector_repository_async import AsyncVectorRepository
+from .vectors.vector_codecs import (
     IdentityVectorPayloadCodec,
     JsonVectorPayloadCodec,
     VectorPayloadCodec,
 )
-from .vector_types import VectorRecord, VectorSearchResult
+from .vectors.vector_types import VectorRecord, VectorSearchResult
 
 __all__ = [
     "C",

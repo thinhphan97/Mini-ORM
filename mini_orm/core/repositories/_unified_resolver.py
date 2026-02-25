@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Sequence, Type, TypeVar, cast
 
-from .models import DataclassModel, require_dataclass_model
+from ..models import DataclassModel, require_dataclass_model
 
 T = TypeVar("T", bound=DataclassModel)
 

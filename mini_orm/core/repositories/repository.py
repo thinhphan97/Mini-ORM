@@ -5,11 +5,11 @@ from __future__ import annotations
 from typing import Any, Generic, Mapping, Optional, Sequence, Type, TypeVar, cast
 
 from ._unified_resolver import resolve_model_and_obj, resolve_model_and_objects
-from .conditions import OrderBy
-from .contracts import DatabasePort
-from .metadata import build_model_metadata
-from .models import DataclassModel, require_dataclass_model
-from .query_builder import WhereInput
+from ..conditions import OrderBy
+from ..contracts import DatabasePort
+from ..metadata import build_model_metadata
+from ..models import DataclassModel, require_dataclass_model
+from ..query_builder import WhereInput
 from .repository_crud import (
     count_rows,
     delete,
@@ -24,7 +24,7 @@ from .repository_crud import (
     update_where,
 )
 from .repository_relations import RelatedResult, RelationCoordinator
-from .schema import (
+from ..schemas.schema import (
     ensure_schema as ensure_schema_for_model,
     validate_schema_conflict,
 )

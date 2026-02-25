@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from .models import require_dataclass_model, table_name
+from ..models import require_dataclass_model, table_name
 
 
 def parse_fk_reference(raw: Any) -> tuple[str, str]:

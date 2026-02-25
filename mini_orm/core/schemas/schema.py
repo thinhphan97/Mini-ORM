@@ -6,8 +6,8 @@ from collections import defaultdict
 from dataclasses import MISSING, Field
 from typing import Any, Type
 
-from .contracts import AsyncDatabasePort, DatabasePort, DialectPort
-from .models import DataclassModel, model_fields, require_dataclass_model, table_name
+from ..contracts import AsyncDatabasePort, DatabasePort, DialectPort
+from ..models import DataclassModel, model_fields, require_dataclass_model, table_name
 from .schema_columns import column_sql, is_nullable, resolve_sql_type
 from .schema_indexes import (
     IndexSpec,
