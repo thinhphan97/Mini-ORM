@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import unittest
 from dataclasses import dataclass, field
 from enum import Enum
@@ -20,6 +21,14 @@ class ValidUser(ValidatedModel):
     )
     age: int = field(default=0, metadata={"ge": 0, "le": 130})
     tags: list[str] = field(default_factory=list, metadata={"max_len": 3})
+
+
+@dataclass
+class CompiledPatternUser(ValidatedModel):
+    email: str = field(
+        default="",
+        metadata={"pattern": re.compile(r"[^@]+@[^@]+\.[^@]+")},
+    )
 
 
 @dataclass
@@ -162,6 +171,13 @@ class ValidatedModelTests(unittest.TestCase):
     def test_pattern_constraint_raises(self) -> None:
         with self.assertRaises(ValidationError):
             ValidUser(email="not-email", age=20)
+
+    def test_compiled_pattern_metadata_supported(self) -> None:
+        valid = CompiledPatternUser(email="alice@example.com")
+        self.assertEqual(valid.email, "alice@example.com")
+
+        with self.assertRaises(ValidationError):
+            CompiledPatternUser(email="not-email")
 
     def test_list_item_type_raises(self) -> None:
         with self.assertRaises(ValidationError):
