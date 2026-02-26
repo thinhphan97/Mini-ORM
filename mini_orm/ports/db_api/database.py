@@ -7,20 +7,27 @@ from typing import Any, Mapping
 
 from ...core.types import MaybeRow, QueryParams, RowMapping, Rows
 from .dialects import Dialect
+from .pool_connector import PoolConnector
 
 
 class Database:
     """Thin DB-API wrapper that normalizes execute and row mapping behavior."""
 
-    def __init__(self, conn: Any, dialect: Dialect):
+    def __init__(self, conn: Any | PoolConnector, dialect: Dialect):
         """Create database adapter.
 
         Args:
-            conn: DB-API connection object.
+            conn: DB-API connection object or `PoolConnector`.
             dialect: Concrete SQL dialect instance.
         """
 
-        self.conn = conn
+        self._pool: PoolConnector | None = None
+        self._closed = False
+        if isinstance(conn, PoolConnector):
+            self._pool = conn
+            self.conn = conn.acquire()
+        else:
+            self.conn = conn
         self.dialect = dialect
 
     def _should_begin_sqlite_transaction(self) -> bool:
@@ -96,3 +103,30 @@ class Database:
         cur = self.execute(sql, params)
         rows = cur.fetchall()
         return [self._row_to_mapping(cur, r) for r in rows]
+
+    def close(self, *, close_pool: bool = False) -> None:
+        """Release/close underlying connection.
+
+        Args:
+            close_pool: Also close pooled connector when this adapter uses `PoolConnector`.
+        """
+
+        if self._closed:
+            if close_pool and self._pool is not None:
+                self._pool.close()
+            return
+        self._closed = True
+        if self._pool is not None:
+            self._pool.release(self.conn)
+            if close_pool:
+                self._pool.close()
+            return
+        close = getattr(self.conn, "close", None)
+        if callable(close):
+            close()
+
+    def __enter__(self) -> Database:
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        self.close()

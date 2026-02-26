@@ -12,6 +12,10 @@
 
 ::: mini_orm.ports.db_api.async_database
 
+## `mini_orm.ports.db_api.pool_connector`
+
+::: mini_orm.ports.db_api.pool_connector
+
 ## `mini_orm.ports.vector.in_memory`
 
 ::: mini_orm.ports.vector.in_memory
