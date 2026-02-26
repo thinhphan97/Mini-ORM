@@ -51,9 +51,9 @@ def _validate_type(name: str, value: Any, annotation: Any) -> None:
     args = get_args(annotation)
 
     if origin is Literal:
-        allowed = set(args)
+        allowed = tuple(args)
         if value not in allowed:
-            raise ValidationError(f"Field '{name}' must be one of {sorted(allowed)!r}.")
+            raise ValidationError(f"Field '{name}' must be one of {allowed!r}.")
         return
 
     if origin in (Union, types.UnionType):
@@ -128,6 +128,8 @@ def _validate_type(name: str, value: Any, annotation: Any) -> None:
             raise ValidationError(
                 f"Field '{name}' cannot be None (expected {annotation.__name__})."
             )
+        if annotation is float and isinstance(value, bool):
+            raise ValidationError(f"Field '{name}' expects float, got bool.")
         if annotation is float and isinstance(value, int):
             return
         if annotation is int and isinstance(value, bool):

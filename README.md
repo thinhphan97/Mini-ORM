@@ -268,7 +268,7 @@ from mini_orm import ValidatedModel, ValidationError
 
 @dataclass
 class CreateUserInput(ValidatedModel):
-    email: str = field(default="", metadata={"non_empty": True, "pattern": r"[^@]+@[^@]+\\.[^@]+"})
+    email: str = field(default="", metadata={"non_empty": True, "pattern": r"[^@]+@[^@]+\.[^@]+"})
     age: int = field(default=0, metadata={"ge": 0, "le": 130})
 
 payload = CreateUserInput(email="alice@example.com", age=20)  # ok

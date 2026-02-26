@@ -51,8 +51,6 @@ class ValidatedRepositorySQLiteTests(unittest.TestCase):
         self.assertIsNotNone(inserted.id)
         loaded = self.repo.get(inserted.id)
         self.assertIsNotNone(loaded)
-        if loaded is None:
-            self.fail("Expected inserted user to be retrievable.")
         self.assertEqual(loaded.email, "alice@example.com")
         self.assertEqual(loaded.display_name, "Alice")
         self.assertEqual(loaded.age, 24)

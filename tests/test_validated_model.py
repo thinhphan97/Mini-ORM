@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Literal, Optional
 
 from mini_orm import ValidatedModel, ValidationError
 
@@ -41,6 +41,16 @@ class DateRange(ValidatedModel):
             raise ValidationError("end_day must be greater than start_day.")
 
 
+@dataclass
+class LiteralMixedField(ValidatedModel):
+    value: Literal[1, "one"] = 1
+
+
+@dataclass
+class FloatField(ValidatedModel):
+    amount: float = 0.0
+
+
 class ValidatedModelTests(unittest.TestCase):
     def test_valid_data_passes(self) -> None:
         user = ValidUser(email="alice@example.com", age=20, tags=["vip"])
@@ -71,6 +81,14 @@ class ValidatedModelTests(unittest.TestCase):
     def test_model_level_hook_raises(self) -> None:
         with self.assertRaises(ValidationError):
             DateRange(start_day=3, end_day=3)
+
+    def test_literal_mixed_type_error(self) -> None:
+        with self.assertRaises(ValidationError):
+            LiteralMixedField(value=2)
+
+    def test_bool_rejected_for_float(self) -> None:
+        with self.assertRaises(ValidationError):
+            FloatField(amount=True)  # type: ignore[arg-type]
 
 
 if __name__ == "__main__":
