@@ -107,7 +107,10 @@ db = Database(pool, SQLiteDialect())
 Safety defaults:
 - SQLite private memory (`:memory:`) is blocked for `max_size > 1`.
 - SQLite with `max_size > 1` requires `check_same_thread=False`.
-- On release, dirty transactions are cleaned by `transaction_guard`.
+- On release, dirty transaction behavior is policy-based via `transaction_guard`:
+  - `raise`: raise error on dirty transaction.
+  - `ignore`: skip cleanup.
+  - `rollback` / `discard`: perform cleanup logic (and `discard` closes the connection).
 
 ## Quick relation setup (metadata-based)
 

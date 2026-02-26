@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import tempfile
+import threading
 import time
 import unittest
 from functools import partial
@@ -201,6 +202,8 @@ class DatabaseAdapterTests(unittest.TestCase):
         db1 = Database(pool, SQLiteDialect())
         conn1 = db1.conn
         db1.close()
+        with self.assertRaises(RuntimeError):
+            db1.execute('SELECT 1;')
 
         db2 = Database(pool, SQLiteDialect())
         try:
@@ -213,6 +216,8 @@ class DatabaseAdapterTests(unittest.TestCase):
         pool = PoolConnector(sqlite3.connect, ":memory:", max_size=1)
         db = Database(pool, SQLiteDialect())
         db.close(close_pool=True)
+        with self.assertRaises(RuntimeError):
+            db.execute('SELECT 1;')
         with self.assertRaises(RuntimeError):
             pool.acquire()
 
@@ -278,11 +283,77 @@ class PoolConnectorTests(unittest.TestCase):
         pool.close()
         self.assertEqual(calls, 2)
 
+    def test_acquire_respects_max_size_under_concurrent_creators(self) -> None:
+        create_gate = threading.Event()
+        first_started = threading.Event()
+        created = 0
+
+        def _factory() -> _FakeBaseConn:
+            nonlocal created
+            created += 1
+            if created == 1:
+                first_started.set()
+            create_gate.wait(0.5)
+            return _FakeBaseConn(in_transaction=False)
+
+        pool = PoolConnector(_factory, max_size=1, reset_session=False)
+        acquired: list[_FakeBaseConn] = []
+        second_error: list[type[BaseException]] = []
+
+        def _first_worker() -> None:
+            conn = pool.acquire(timeout=1)
+            acquired.append(conn)
+
+        def _second_worker() -> None:
+            try:
+                pool.acquire(timeout=0.05)
+            except BaseException as exc:  # noqa: BLE001
+                second_error.append(type(exc))
+
+        t1 = threading.Thread(target=_first_worker)
+        t1.start()
+        self.assertTrue(first_started.wait(0.2))
+
+        t2 = threading.Thread(target=_second_worker)
+        t2.start()
+        t2.join(timeout=1)
+        self.assertFalse(t2.is_alive())
+
+        create_gate.set()
+        t1.join(timeout=1)
+        self.assertFalse(t1.is_alive())
+        self.assertEqual(created, 1)
+        self.assertEqual(second_error, [TimeoutError])
+
+        if acquired:
+            pool.release(acquired[0])
+        pool.close()
+
     def test_acquire_after_close_raises(self) -> None:
         pool = PoolConnector(sqlite3.connect, ":memory:", max_size=1)
         pool.close()
         with self.assertRaises(RuntimeError):
             pool.acquire()
+
+    def test_waiting_acquire_is_unblocked_when_pool_closes(self) -> None:
+        pool = PoolConnector(_FakeBaseConn, max_size=1, reset_session=False)
+        conn = pool.acquire()
+        errors: list[type[BaseException]] = []
+
+        def _waiter() -> None:
+            try:
+                pool.acquire()
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(type(exc))
+
+        waiter = threading.Thread(target=_waiter)
+        waiter.start()
+        time.sleep(0.05)
+        pool.close()
+        waiter.join(timeout=1)
+        self.assertFalse(waiter.is_alive())
+        self.assertEqual(errors, [RuntimeError])
+        pool.release(conn)
 
     def test_connection_context_manager_releases_connection(self) -> None:
         pool = PoolConnector(sqlite3.connect, ":memory:", max_size=1)

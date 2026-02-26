@@ -53,6 +53,7 @@ class PoolConnector:
         self._idle: list[Any] = []
         self._borrowed_ids: set[int] = set()
         self._known_ids: set[int] = set()
+        self._creating = 0
         self._in_use = 0
         self._closed = False
         self._condition = threading.Condition()
@@ -179,11 +180,11 @@ class PoolConnector:
         """Borrow one connection from the pool."""
 
         with self._condition:
-            self._ensure_open()
             deadline = None if timeout is None else (time.monotonic() + timeout)
             should_create = False
 
             while True:
+                self._ensure_open()
                 if self._idle:
                     conn = self._idle.pop()
                     conn_id = id(conn)
@@ -191,7 +192,9 @@ class PoolConnector:
                     self._in_use += 1
                     return conn
 
-                if len(self._known_ids) < self._max_size:
+                total_slots = len(self._known_ids) + self._creating
+                if total_slots < self._max_size:
+                    self._creating += 1
                     self._in_use += 1
                     should_create = True
                     break
@@ -210,11 +213,13 @@ class PoolConnector:
                 conn = self._connect(*self._connect_args, **self._connect_kwargs)
             except BaseException:
                 with self._condition:
+                    self._creating -= 1
                     self._in_use -= 1
                     self._condition.notify()
                 raise
 
             with self._condition:
+                self._creating -= 1
                 conn_id = id(conn)
                 self._known_ids.add(conn_id)
                 self._borrowed_ids.add(conn_id)

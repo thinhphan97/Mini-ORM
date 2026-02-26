@@ -228,7 +228,17 @@ class AsyncDatabaseAdapterTests(unittest.IsolatedAsyncioTestCase):
         db = AsyncDatabase(pool, SQLiteDialect())
         await db.aclose(close_pool=True)
         with self.assertRaises(RuntimeError):
+            await db.execute('SELECT 1;')
+        with self.assertRaises(RuntimeError):
             pool.acquire()
+
+    async def test_close_marks_async_database_unusable(self) -> None:
+        pool = PoolConnector(sqlite3.connect, ":memory:", max_size=1)
+        db = AsyncDatabase(pool, SQLiteDialect())
+        db.close()
+        with self.assertRaises(RuntimeError):
+            await db.execute('SELECT 1;')
+        pool.close()
 
 
 class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):
