@@ -218,6 +218,7 @@ class PoolConnector:
                     self._condition.notify()
                 raise
 
+            should_close_because_closed = False
             with self._condition:
                 self._creating -= 1
                 conn_id = id(conn)
@@ -228,8 +229,10 @@ class PoolConnector:
                     self._known_ids.discard(conn_id)
                     self._in_use -= 1
                     self._condition.notify()
-                    self._close_connection(conn)
-                    raise RuntimeError("PoolConnector is closed.")
+                    should_close_because_closed = True
+            if should_close_because_closed:
+                self._close_connection(conn)
+                raise RuntimeError("PoolConnector is closed.")
             return conn
 
         raise RuntimeError("Unexpected pool acquire state.")
@@ -249,11 +252,15 @@ class PoolConnector:
         cleanup_error: Exception | None = None
         should_close = False
         try:
-            if self._connection_in_transaction(conn):
+            in_transaction = self._connection_in_transaction(conn)
+            if in_transaction:
                 self._apply_transaction_guard(conn)
                 if self._strict_pool or self._transaction_guard == "discard":
                     should_close = True
-            if self._reset_session:
+            should_skip_session_reset = should_close or (
+                in_transaction and self._transaction_guard == "ignore"
+            )
+            if self._reset_session and not should_skip_session_reset:
                 self._reset_connection_session(conn)
         except Exception as exc:
             cleanup_error = exc

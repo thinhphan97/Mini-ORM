@@ -142,22 +142,31 @@ class AsyncDatabase:
                 self._pool.close()
             return
         conn = self.conn
-        self._closed = True
-        self.conn = None
         if conn is None:
             if close_pool and self._pool is not None:
                 self._pool.close()
             return
+        close = getattr(conn, "close", None)
+        close_method = getattr(type(conn), "close", None)
+        if (
+            self._pool is None
+            and callable(close)
+            and inspect.iscoroutinefunction(close_method)
+        ):
+            raise RuntimeError(
+                "AsyncDatabase.close() does not support async close() on "
+                f"connection {conn!r} (type={type(conn).__name__}). "
+                "Use await aclose() instead."
+            )
+
+        self._closed = True
+        self.conn = None
         if self._pool is not None:
             self._pool.release(conn)
             if close_pool:
                 self._pool.close()
             return
-        close = getattr(conn, "close", None)
         if callable(close):
-            close_method = getattr(type(conn), "close", None)
-            if inspect.iscoroutinefunction(close_method):
-                return
             close()
 
     async def aclose(self, *, close_pool: bool = False) -> None:

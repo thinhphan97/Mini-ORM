@@ -158,6 +158,14 @@ class _NoReturningAsyncDb:
         raise NotImplementedError
 
 
+class _AsyncCloseConnection:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
 class AsyncDatabaseAdapterTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.conn = sqlite3.connect(":memory:")
@@ -239,6 +247,18 @@ class AsyncDatabaseAdapterTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(RuntimeError):
             await db.execute('SELECT 1;')
         pool.close()
+
+    async def test_close_raises_for_async_close_method_and_aclose_still_works(self) -> None:
+        conn = _AsyncCloseConnection()
+        db = AsyncDatabase(conn, SQLiteDialect())
+
+        with self.assertRaises(RuntimeError) as ctx:
+            db.close()
+        self.assertIn("Use await aclose()", str(ctx.exception))
+        self.assertIn("_AsyncCloseConnection", str(ctx.exception))
+
+        await db.aclose()
+        self.assertTrue(conn.closed)
 
 
 class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):

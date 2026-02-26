@@ -350,6 +350,9 @@ class PoolConnectorTests(unittest.TestCase):
         waiter.start()
         time.sleep(0.05)
         pool.close()
+        # Intentional ordering: join waiter first, then release-after-close.
+        # Related behavior assertion is covered in
+        # `test_release_after_pool_close_closes_borrowed_connection`.
         waiter.join(timeout=1)
         self.assertFalse(waiter.is_alive())
         self.assertEqual(errors, [RuntimeError])
@@ -566,6 +569,17 @@ class PoolConnectorTests(unittest.TestCase):
         self.assertIs(reused, conn)
         self.assertTrue(reused.in_transaction)
         pool.release(reused)
+        pool.close()
+
+    def test_transaction_guard_ignore_skips_session_reset(self) -> None:
+        pool = PoolConnector(_FakePgConn, max_size=1, transaction_guard="ignore")
+        conn = pool.acquire()
+        conn.in_transaction = True
+        pool.release(conn)
+
+        self.assertEqual(conn.rollback_calls, 0)
+        self.assertEqual(conn.executed_sql, [])
+        self.assertEqual(conn.commit_calls, 0)
         pool.close()
 
     def test_session_reset_hook_is_called_on_release(self) -> None:
