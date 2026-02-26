@@ -13,6 +13,7 @@ from mini_orm import (
     AsyncRepository,
     AsyncUnifiedRepository,
     OrderBy,
+    PoolConnector,
     SQLiteDialect,
     apply_schema_async,
 )
@@ -157,6 +158,14 @@ class _NoReturningAsyncDb:
         raise NotImplementedError
 
 
+class _AsyncCloseConnection:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
 class AsyncDatabaseAdapterTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.conn = sqlite3.connect(":memory:")
@@ -193,6 +202,63 @@ class AsyncDatabaseAdapterTests(unittest.IsolatedAsyncioTestCase):
 
         count = await self.db.fetchone('SELECT COUNT(*) AS "count" FROM "t";')
         self.assertEqual(count["count"], 0)
+
+    async def test_database_can_use_pool_connector(self) -> None:
+        pool = PoolConnector(sqlite3.connect, ":memory:", max_size=1)
+        db = AsyncDatabase(pool, SQLiteDialect())
+        try:
+            await db.execute('CREATE TABLE "t" ("id" INTEGER, "name" TEXT);')
+            await db.execute(
+                'INSERT INTO "t" ("id", "name") VALUES (:id, :name);',
+                {"id": 1, "name": "pool"},
+            )
+            row = await db.fetchone('SELECT * FROM "t" WHERE "id" = :id;', {"id": 1})
+            self.assertEqual(row["name"], "pool")
+        finally:
+            await db.aclose()
+            pool.close()
+
+    async def test_aclose_returns_connection_to_pool(self) -> None:
+        pool = PoolConnector(sqlite3.connect, ":memory:", max_size=1)
+        db1 = AsyncDatabase(pool, SQLiteDialect())
+        conn1 = db1.conn
+        await db1.aclose()
+
+        db2 = AsyncDatabase(pool, SQLiteDialect())
+        try:
+            self.assertIs(db2.conn, conn1)
+        finally:
+            await db2.aclose()
+            pool.close()
+
+    async def test_aclose_with_close_pool_true_closes_pool(self) -> None:
+        pool = PoolConnector(sqlite3.connect, ":memory:", max_size=1)
+        db = AsyncDatabase(pool, SQLiteDialect())
+        await db.aclose(close_pool=True)
+        with self.assertRaises(RuntimeError):
+            await db.execute('SELECT 1;')
+        with self.assertRaises(RuntimeError):
+            pool.acquire()
+
+    async def test_close_marks_async_database_unusable(self) -> None:
+        pool = PoolConnector(sqlite3.connect, ":memory:", max_size=1)
+        db = AsyncDatabase(pool, SQLiteDialect())
+        db.close()
+        with self.assertRaises(RuntimeError):
+            await db.execute('SELECT 1;')
+        pool.close()
+
+    async def test_close_raises_for_async_close_method_and_aclose_still_works(self) -> None:
+        conn = _AsyncCloseConnection()
+        db = AsyncDatabase(conn, SQLiteDialect())
+
+        with self.assertRaises(RuntimeError) as ctx:
+            db.close()
+        self.assertIn("Use await aclose()", str(ctx.exception))
+        self.assertIn("_AsyncCloseConnection", str(ctx.exception))
+
+        await db.aclose()
+        self.assertTrue(conn.closed)
 
 
 class AsyncRepositorySQLiteTests(unittest.IsolatedAsyncioTestCase):

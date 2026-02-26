@@ -1,6 +1,14 @@
 """Public port exports for concrete adapter implementations."""
 
-from .db_api import AsyncDatabase, Database, Dialect, MySQLDialect, PostgresDialect, SQLiteDialect
+from .db_api import (
+    AsyncDatabase,
+    Database,
+    Dialect,
+    MySQLDialect,
+    PoolConnector,
+    PostgresDialect,
+    SQLiteDialect,
+)
 from .vector import (
     ChromaVectorStore,
     FaissVectorStore,
@@ -16,6 +24,7 @@ __all__ = [
     "FaissVectorStore",
     "InMemoryVectorStore",
     "MySQLDialect",
+    "PoolConnector",
     "PostgresDialect",
     "QdrantVectorStore",
     "SQLiteDialect",

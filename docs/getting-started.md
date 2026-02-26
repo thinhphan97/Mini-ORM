@@ -86,6 +86,32 @@ Async SQL keeps the same repository method names as sync (`insert`, `get`, `list
 `update`, `delete`, `count`, `exists`, `create`, `get_related`, ...), only adding
 `await` and `async with`.
 
+## Connection pooling guards (`PoolConnector`)
+
+```python
+import sqlite3
+from mini_orm import Database, PoolConnector, SQLiteDialect
+
+pool = PoolConnector(
+    sqlite3.connect,
+    "file:appdb?mode=memory&cache=shared",
+    uri=True,
+    check_same_thread=False,
+    max_size=4,
+    transaction_guard="rollback",
+    strict_pool=False,
+)
+db = Database(pool, SQLiteDialect())
+```
+
+Safety defaults:
+- SQLite private memory (`:memory:`) is blocked for `max_size > 1`.
+- SQLite with `max_size > 1` requires `check_same_thread=False`.
+- On release, dirty transaction behavior is policy-based via `transaction_guard`:
+  - `raise`: raise error on dirty transaction.
+  - `ignore`: skip cleanup.
+  - `rollback` / `discard`: perform cleanup logic (and `discard` closes the connection).
+
 ## Quick relation setup (metadata-based)
 
 ```python

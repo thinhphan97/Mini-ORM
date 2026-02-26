@@ -7,46 +7,61 @@ from typing import Any, Mapping
 
 from ...core.types import MaybeRow, QueryParams, RowMapping, Rows
 from .dialects import Dialect
+from .pool_connector import PoolConnector
 
 
 class Database:
     """Thin DB-API wrapper that normalizes execute and row mapping behavior."""
 
-    def __init__(self, conn: Any, dialect: Dialect):
+    def __init__(self, conn: Any | PoolConnector, dialect: Dialect):
         """Create database adapter.
 
         Args:
-            conn: DB-API connection object.
+            conn: DB-API connection object or `PoolConnector`.
             dialect: Concrete SQL dialect instance.
         """
 
-        self.conn = conn
+        self._pool: PoolConnector | None = None
+        self._closed = False
+        self.conn: Any | None
+        if isinstance(conn, PoolConnector):
+            self._pool = conn
+            self.conn = conn.acquire()
+        else:
+            self.conn = conn
         self.dialect = dialect
 
-    def _should_begin_sqlite_transaction(self) -> bool:
+    def _require_open_connection(self) -> Any:
+        if self._closed or self.conn is None:
+            raise RuntimeError("connection is closed")
+        return self.conn
+
+    def _should_begin_sqlite_transaction(self, conn: Any) -> bool:
         if getattr(self.dialect, "name", "").lower() != "sqlite":
             return False
-        if getattr(self.conn, "isolation_level", None) is not None:
+        if getattr(conn, "isolation_level", None) is not None:
             return False
-        return not bool(getattr(self.conn, "in_transaction", False))
+        return not bool(getattr(conn, "in_transaction", False))
 
     @contextlib.contextmanager
     def transaction(self):
         """Provide commit/rollback transaction scope."""
 
+        conn = self._require_open_connection()
         try:
-            if self._should_begin_sqlite_transaction():
-                self.conn.execute("BEGIN")
+            if self._should_begin_sqlite_transaction(conn):
+                conn.execute("BEGIN")
             yield
-            self.conn.commit()
+            conn.commit()
         except BaseException:
-            self.conn.rollback()
+            conn.rollback()
             raise
 
     def execute(self, sql: str, params: QueryParams = None) -> Any:
         """Execute SQL with optional parameters and return cursor."""
 
-        cur = self.conn.cursor()
+        conn = self._require_open_connection()
+        cur = conn.cursor()
         if params is None:
             cur.execute(sql)
         else:
@@ -96,3 +111,36 @@ class Database:
         cur = self.execute(sql, params)
         rows = cur.fetchall()
         return [self._row_to_mapping(cur, r) for r in rows]
+
+    def close(self, *, close_pool: bool = False) -> None:
+        """Release/close underlying connection.
+
+        Args:
+            close_pool: Also close pooled connector when this adapter uses `PoolConnector`.
+        """
+
+        if self._closed:
+            if close_pool and self._pool is not None:
+                self._pool.close()
+            return
+        conn = self.conn
+        self._closed = True
+        self.conn = None
+        if conn is None:
+            if close_pool and self._pool is not None:
+                self._pool.close()
+            return
+        if self._pool is not None:
+            self._pool.release(conn)
+            if close_pool:
+                self._pool.close()
+            return
+        close = getattr(conn, "close", None)
+        if callable(close):
+            close()
+
+    def __enter__(self) -> Database:
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        self.close()

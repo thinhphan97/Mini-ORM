@@ -76,6 +76,31 @@ rows = repo.list(
 total = repo.count(where=C.like("email", "%@example.com"))
 ```
 
+## Connection pooling (`PoolConnector`)
+
+```python
+import sqlite3
+from mini_orm import Database, PoolConnector, SQLiteDialect
+
+pool = PoolConnector(
+    sqlite3.connect,
+    "app.db",
+    check_same_thread=False,
+    max_size=10,
+    transaction_guard="rollback",  # rollback | raise | ignore | discard
+    strict_pool=False,             # True: discard dirty connections
+)
+db = Database(pool, SQLiteDialect())
+try:
+    db.execute('CREATE TABLE IF NOT EXISTS "t" ("id" INTEGER);')
+finally:
+    db.close(close_pool=True)  # release adapter connection + close whole pool
+```
+
+Note: for SQLite `:memory:`, `PoolConnector` rejects `max_size > 1` because each
+connection would otherwise get an isolated in-memory database.  
+Use shared-memory URI (`file:...mode=memory&cache=shared`, `uri=True`) or `max_size=1`.
+
 ## Quick usage (Unified SQL hub)
 
 ```python
