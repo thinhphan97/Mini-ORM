@@ -161,7 +161,7 @@ def _validate_constraints(name: str, value: Any, metadata: dict[str, Any]) -> No
         raise ValidationError(f"Field '{name}' must be one of {metadata['choices']!r}.")
 
     if isinstance(value, str) and "pattern" in metadata:
-        if re.fullmatch(str(metadata["pattern"]), value) is None:
+        if re.fullmatch(metadata["pattern"], value) is None:
             raise ValidationError(
                 f"Field '{name}' must match regex pattern {metadata['pattern']!r}."
             )
