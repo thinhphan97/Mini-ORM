@@ -14,6 +14,7 @@ from .models import (
     to_dict,
 )
 from .query_builder import WhereInput
+from .validated_model import ValidatedModel, ValidationError
 from .repositories.repository import RelatedResult, Repository, UnifiedRepository
 from .repositories.repository_async import AsyncRepository, AsyncUnifiedRepository
 from .repositories.repository_relations_async import AsyncRelatedResult
@@ -48,6 +49,8 @@ __all__ = [
     "WhereExpression",
     "WhereInput",
     "DataclassModel",
+    "ValidatedModel",
+    "ValidationError",
     "RelationSpec",
     "RelationType",
     "Repository",

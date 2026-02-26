@@ -19,6 +19,8 @@ python examples/sql/10_async_postgres_example.py
 python examples/sql/11_async_mysql_example.py
 python examples/sql/12_unified_repository.py
 python examples/sql/13_async_unified_repository.py
+python examples/sql/14_validated_model.py
+python examples/sql/15_validated_repository_sqlite.py
 
 python examples/vector/01_inmemory_basic.py
 python examples/vector/02_inmemory_metrics_and_filters.py
@@ -100,6 +102,16 @@ python examples/vector/11_async_faiss_example.py
   - Async equivalent with `AsyncUnifiedRepository`.
   - Mutation methods infer model from object; query methods still pass model class.
   - Uses `auto_schema=True` and `require_registration=True` with `await register_many(...)`.
+
+- `examples/sql/14_validated_model.py`
+  - `ValidatedModel` base class for pydantic-like dataclass input validation.
+  - Field constraints via metadata (`non_empty`, `pattern`, `ge`, `le`, ...).
+  - Raises `ValidationError` on invalid input at construction time.
+
+- `examples/sql/15_validated_repository_sqlite.py`
+  - Combines `ValidatedModel` with `Repository` on SQLite.
+  - Uses `auto_schema=True` for first-use setup.
+  - Shows friendly invalid-input handling before data is written.
 
 ## Vector examples
 

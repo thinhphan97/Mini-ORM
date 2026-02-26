@@ -20,6 +20,10 @@
 
 ::: mini_orm.core.metadata
 
+## `mini_orm.core.validated_model`
+
+::: mini_orm.core.validated_model
+
 ## `mini_orm.core.schemas.schema`
 
 ::: mini_orm.core.schemas.schema
