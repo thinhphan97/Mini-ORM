@@ -52,7 +52,7 @@ def _validate_type(name: str, value: Any, annotation: Any) -> None:
 
     if origin is Literal:
         allowed = tuple(args)
-        if value not in allowed:
+        if not any(value == member and type(value) is type(member) for member in allowed):
             raise ValidationError(f"Field '{name}' must be one of {allowed!r}.")
         return
 
@@ -157,7 +157,7 @@ def _validate_constraints(name: str, value: Any, metadata: dict[str, Any]) -> No
     if metadata.get("non_empty") and isinstance(value, str) and not value.strip():
         raise ValidationError(f"Field '{name}' must be non-empty.")
 
-    if "choices" in metadata and value not in set(metadata["choices"]):
+    if "choices" in metadata and value not in metadata["choices"]:
         raise ValidationError(f"Field '{name}' must be one of {metadata['choices']!r}.")
 
     if isinstance(value, str) and "pattern" in metadata:
