@@ -170,6 +170,11 @@ See runnable example:
   - Conditions, query builder, metadata, repository, async repository, schema.
 - `mini_orm.ports.db_api`
   - `Database` / `AsyncDatabase` adapters and dialect implementations.
+  - `PoolConnector` for connection pooling with safety guards:
+    - SQLite private in-memory detection for `max_size > 1`.
+    - SQLite `check_same_thread` guard for pooled connections.
+    - Dirty transaction guard on release (`rollback` / `raise` / `ignore` / `discard`).
+    - Optional strict mode to discard dirty connections.
 
 This separation keeps SQL generation logic backend-agnostic and lets you replace adapters without changing core behavior.
 

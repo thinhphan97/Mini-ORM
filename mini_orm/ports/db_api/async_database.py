@@ -3,52 +3,68 @@
 from __future__ import annotations
 
 import contextlib
+import inspect
 from typing import Any, Mapping
 
 from ...core._async_utils import _maybe_await
 from ...core.types import MaybeRow, QueryParams, RowMapping, Rows
 from .dialects import Dialect
+from .pool_connector import PoolConnector
 
 
 class AsyncDatabase:
     """Async database wrapper that normalizes execute and row mapping behavior."""
 
-    def __init__(self, conn: Any, dialect: Dialect):
+    def __init__(self, conn: Any | PoolConnector, dialect: Dialect):
         """Create async database adapter.
 
         Args:
-            conn: Async (or sync) DB connection object.
+            conn: Async (or sync) DB connection object or `PoolConnector`.
             dialect: Concrete SQL dialect instance.
         """
 
-        self.conn = conn
+        self._pool: PoolConnector | None = None
+        self._closed = False
+        self.conn: Any | None
+        if isinstance(conn, PoolConnector):
+            self._pool = conn
+            self.conn = conn.acquire()
+        else:
+            self.conn = conn
         self.dialect = dialect
 
-    def _should_begin_sqlite_transaction(self) -> bool:
+    def _require_open_connection(self) -> Any:
+        if self._closed or self.conn is None:
+            raise RuntimeError("connection is closed")
+        return self.conn
+
+    def _should_begin_sqlite_transaction(self, conn: Any) -> bool:
         if getattr(self.dialect, "name", "").lower() != "sqlite":
             return False
-        if getattr(self.conn, "isolation_level", None) is not None:
+        if getattr(conn, "isolation_level", None) is not None:
             return False
-        return not bool(getattr(self.conn, "in_transaction", False))
+        return not bool(getattr(conn, "in_transaction", False))
 
     @contextlib.asynccontextmanager
     async def transaction(self):
         """Provide async commit/rollback transaction scope."""
 
-        if self._should_begin_sqlite_transaction():
-            await _maybe_await(self.conn.execute("BEGIN"))
+        conn = self._require_open_connection()
+        if self._should_begin_sqlite_transaction(conn):
+            await _maybe_await(conn.execute("BEGIN"))
         try:
             yield
         except BaseException:
-            await _maybe_await(self.conn.rollback())
+            await _maybe_await(conn.rollback())
             raise
         else:
-            await _maybe_await(self.conn.commit())
+            await _maybe_await(conn.commit())
 
     async def execute(self, sql: str, params: QueryParams = None) -> Any:
         """Execute SQL with optional parameters and return cursor."""
 
-        cur = await _maybe_await(self.conn.cursor())
+        conn = self._require_open_connection()
+        cur = await _maybe_await(conn.cursor())
         try:
             if params is None:
                 await _maybe_await(cur.execute(sql))
@@ -113,3 +129,75 @@ class AsyncDatabase:
             close = getattr(cur, "close", None)
             if callable(close):
                 await _maybe_await(close())
+
+    def close(self, *, close_pool: bool = False) -> None:
+        """Release/close underlying connection.
+
+        Args:
+            close_pool: Also close pooled connector when this adapter uses `PoolConnector`.
+        """
+
+        if self._closed:
+            if close_pool and self._pool is not None:
+                self._pool.close()
+            return
+        conn = self.conn
+        if conn is None:
+            if close_pool and self._pool is not None:
+                self._pool.close()
+            return
+        close = getattr(conn, "close", None)
+        close_method = getattr(type(conn), "close", None)
+        if (
+            self._pool is None
+            and callable(close)
+            and inspect.iscoroutinefunction(close_method)
+        ):
+            raise RuntimeError(
+                "AsyncDatabase.close() does not support async close() on "
+                f"connection {conn!r} (type={type(conn).__name__}). "
+                "Use await aclose() instead."
+            )
+
+        self._closed = True
+        self.conn = None
+        if self._pool is not None:
+            self._pool.release(conn)
+            if close_pool:
+                self._pool.close()
+            return
+        if callable(close):
+            close()
+
+    async def aclose(self, *, close_pool: bool = False) -> None:
+        """Async release/close underlying connection.
+
+        Args:
+            close_pool: Also close pooled connector when this adapter uses `PoolConnector`.
+        """
+
+        if self._closed:
+            if close_pool and self._pool is not None:
+                self._pool.close()
+            return
+        conn = self.conn
+        self._closed = True
+        self.conn = None
+        if conn is None:
+            if close_pool and self._pool is not None:
+                self._pool.close()
+            return
+        if self._pool is not None:
+            self._pool.release(conn)
+            if close_pool:
+                self._pool.close()
+            return
+        close = getattr(conn, "close", None)
+        if callable(close):
+            await _maybe_await(close())
+
+    async def __aenter__(self) -> AsyncDatabase:
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        await self.aclose()

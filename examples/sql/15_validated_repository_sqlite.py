@@ -16,7 +16,14 @@ PROJECT_ROOT = next(
 if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from mini_orm import Database, Repository, SQLiteDialect, ValidationError, ValidatedModel
+from mini_orm import (
+    Database,
+    PoolConnector,
+    Repository,
+    SQLiteDialect,
+    ValidationError,
+    ValidatedModel,
+)
 
 
 @dataclass
@@ -57,9 +64,15 @@ def create_customer(
 
 
 def main() -> None:
-    conn = sqlite3.connect(":memory:")
+    pool = PoolConnector(
+        sqlite3.connect,
+        "file:validated_repo?mode=memory&cache=shared",
+        uri=True,
+        check_same_thread=False,
+        max_size=4,
+    )
+    db = Database(pool, SQLiteDialect())
     try:
-        db = Database(conn, SQLiteDialect())
         # auto_schema=True keeps the first-use flow simple for users.
         repo = Repository[Customer](db, Customer, auto_schema=True)
 
@@ -79,7 +92,7 @@ def main() -> None:
         all_customers = repo.list()
         print("Stored customers:", all_customers)
     finally:
-        conn.close()
+        db.close(close_pool=True)
 
 
 if __name__ == "__main__":
