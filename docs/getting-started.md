@@ -175,6 +175,27 @@ asyncio.run(main())
 Async vector keeps method names from sync (`create_collection`, `upsert`, `query`,
 `fetch`, `delete`), only adding `await`.
 
+## Dataclass Input Validation (Optional)
+
+Use `ValidatedModel` when you want pydantic-like runtime checks during
+dataclass construction.
+
+```python
+from dataclasses import dataclass, field
+
+from mini_orm import ValidatedModel, ValidationError
+
+@dataclass
+class CreateUserInput(ValidatedModel):
+    email: str = field(default="", metadata={"non_empty": True, "pattern": r"[^@]+@[^@]+\.[^@]+"})
+    age: int = field(default=0, metadata={"ge": 0, "le": 130})
+
+try:
+    CreateUserInput(email="bad-email", age=-1)
+except ValidationError as exc:
+    print("Validation error:", exc)
+```
+
 ## Build documentation
 
 ```bash
