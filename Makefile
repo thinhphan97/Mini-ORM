@@ -5,6 +5,7 @@ PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
 UNITTEST ?= $(PYTHON) -m unittest
 DOCKER_COMPOSE ?= docker compose
+PROJECT_ROOT := $(CURDIR)
 
 SQL_EXAMPLES := $(sort $(wildcard examples/sql/[0-9][0-9]_*.py))
 VECTOR_EXAMPLES := $(sort $(wildcard examples/vector/[0-9][0-9]_*.py))
@@ -79,13 +80,13 @@ examples: examples-sql examples-vector ## Run all SQL and vector examples
 examples-sql: ## Run all SQL examples
 	@for file in $(SQL_EXAMPLES); do \
 		echo "==> Running $$file"; \
-		$(PYTHON) "$$file"; \
+		PYTHONPATH="$(PROJECT_ROOT):$${PYTHONPATH:-}" $(PYTHON) "$$file"; \
 	done
 
 examples-vector: ## Run all vector examples
 	@for file in $(VECTOR_EXAMPLES); do \
 		echo "==> Running $$file"; \
-		$(PYTHON) "$$file"; \
+		PYTHONPATH="$(PROJECT_ROOT):$${PYTHONPATH:-}" $(PYTHON) "$$file"; \
 	done
 
 example-sql: ## Run one SQL example (usage: make example-sql FILE=examples/sql/01_basic_crud.py)
@@ -93,11 +94,11 @@ example-sql: ## Run one SQL example (usage: make example-sql FILE=examples/sql/0
 		echo "Missing FILE. Example: make example-sql FILE=examples/sql/01_basic_crud.py"; \
 		exit 1; \
 	fi
-	$(PYTHON) "$(FILE)"
+	PYTHONPATH="$(PROJECT_ROOT):$${PYTHONPATH:-}" $(PYTHON) "$(FILE)"
 
 example-vector: ## Run one vector example (usage: make example-vector FILE=examples/vector/01_inmemory_basic.py)
 	@if [[ -z "$(FILE)" ]]; then \
 		echo "Missing FILE. Example: make example-vector FILE=examples/vector/01_inmemory_basic.py"; \
 		exit 1; \
 	fi
-	$(PYTHON) "$(FILE)"
+	PYTHONPATH="$(PROJECT_ROOT):$${PYTHONPATH:-}" $(PYTHON) "$(FILE)"
