@@ -55,6 +55,7 @@ class _FakePostgresDB:
         self.dialect = _FakePostgresDialect()
         self.extension_created = False
         self._tables: dict[tuple[str, str], dict[str, object]] = {}
+        self._collection_metadata: dict[tuple[str, str], dict[str, object]] = {}
 
     @contextmanager
     def transaction(self):
@@ -64,6 +65,17 @@ class _FakePostgresDB:
         lowered = " ".join(sql.strip().split()).lower()
         if lowered.startswith("create extension if not exists vector"):
             self.extension_created = True
+            return None
+        if lowered.startswith(
+            'create table if not exists "_miniorm_pgvector_collections"'
+        ):
+            return None
+        if lowered.startswith('insert into "_miniorm_pgvector_collections"'):
+            collection_schema, collection_table, metric, dimension = tuple(params or ())
+            self._collection_metadata[(str(collection_schema), str(collection_table))] = {
+                "metric": str(metric),
+                "dimension": int(dimension),
+            }
             return None
         if lowered.startswith("drop table"):
             schema, table = self._parse_table_after(sql, "DROP TABLE")
@@ -94,11 +106,19 @@ class _FakePostgresDB:
 
     def fetchone(self, sql, params=None):
         lowered = " ".join(sql.strip().split()).lower()
+        if lowered.startswith("select current_schema() as schema_name"):
+            return {"schema_name": "public"}
         if "from information_schema.tables" in lowered:
             schema, table = self._table_lookup_from_params(params or ())
             if (schema, table) in self._tables:
                 return {"exists_flag": 1}
             return None
+        if lowered.startswith('select "metric" from "_miniorm_pgvector_collections"'):
+            collection_schema, collection_table = tuple(params or ())
+            row = self._collection_metadata.get((str(collection_schema), str(collection_table)))
+            if row is None:
+                return None
+            return {"metric": row["metric"]}
         if "from pg_attribute a" in lowered and "format_type" in lowered:
             schema, table = self._table_lookup_from_params(params or ())
             table_state = self._tables.get((schema, table))
@@ -309,6 +329,27 @@ class PgVectorStoreTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             store.upsert("discovery_items", [VectorRecord("bad", [1, 0, 0])])
+
+    def test_pgvector_discovery_preserves_non_cosine_metric(self) -> None:
+        db = _FakePostgresDB()
+        store = PgVectorStore(db)
+        store.create_collection(
+            "discovery_items",
+            dimension=2,
+            metric=VectorMetric.DOT,
+        )
+        store.upsert(
+            "discovery_items",
+            [
+                VectorRecord("a", [1, 0]),
+                VectorRecord("b", [2, 0]),
+                VectorRecord("c", [0, 1]),
+            ],
+        )
+
+        fresh_store = PgVectorStore(db, ensure_extension=False)
+        hits = fresh_store.query("discovery_items", [1, 0], top_k=3)
+        self.assertEqual([hit.id for hit in hits], ["b", "a", "c"])
 
     def test_pgvector_requires_postgres_dialect(self) -> None:
         db = _FakePostgresDB()

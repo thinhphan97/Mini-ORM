@@ -3,7 +3,8 @@
 ## Run tests
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"
+make test
+make test-vector
 ```
 
 ## Start external services for examples/tests
@@ -15,31 +16,45 @@ python -m unittest discover -s tests -p "test_*.py"
 - Qdrant (`qdrant` service)
 - Chroma (`chroma` service)
 
-Start:
+Start services:
 
 ```bash
-docker compose up -d
-docker compose ps
+make compose-up
+make compose-ps
 ```
 
-Stop:
+Stop services:
 
 ```bash
-docker compose down
+make compose-down
 ```
 
 If you need to reset DB data volumes:
 
 ```bash
-docker compose down -v
+make compose-reset
 ```
 
-Run host-server vector integration tests (Qdrant/Chroma):
+Run host-server vector integration tests (Qdrant/Chroma/PgVector):
 
 ```bash
-MINI_ORM_VECTOR_HOST_TESTS=1 python -m unittest \
-  tests.test_vector_qdrant_store \
-  tests.test_vector_chroma_store
+# Required for tests.test_vector_pgvector_store:
+export MINI_ORM_PG_HOST=localhost
+export MINI_ORM_PG_PORT=5432
+export MINI_ORM_PG_USER=postgres
+export MINI_ORM_PG_PASSWORD=password
+export MINI_ORM_PG_DATABASE=postgres
+
+make test-vector-host
+```
+
+The target above automatically sets `MINI_ORM_VECTOR_HOST_TESTS=1`
+(`RUN_HOST_VECTOR_TESTS` in the test modules is derived from this flag).
+
+Run only PgVector host SQL+vector integration test:
+
+```bash
+make test-pgvector-host
 ```
 
 Vector tests are split by backend for easier observation:
@@ -53,8 +68,7 @@ Vector tests are split by backend for easier observation:
 ## Build library artifacts
 
 ```bash
-pip install -r requirements-build.txt
-./scripts/build_lib.sh
+make build-lib
 ```
 
 Artifacts are generated under `dist/` (`.whl` and `.tar.gz`).
@@ -62,14 +76,14 @@ Artifacts are generated under `dist/` (`.whl` and `.tar.gz`).
 ## Publish artifacts
 
 ```bash
-pip install -r requirements-publish.txt
-python3 -m twine upload dist/*
+make release-check
+make release-lib
 ```
 
 ## Build docs locally
 
 ```bash
-pip install -r requirements-docs.txt
+make deps-docs
 mkdocs serve
 ```
 

@@ -4,7 +4,7 @@
 
 - Python 3.10+
 
-## Install project dependencies
+## Install documentation dependencies
 
 ```bash
 pip install -r requirements-docs.txt
@@ -17,7 +17,15 @@ running database services, you can start
 the bundled compose stack:
 
 ```bash
+make compose-up
+make compose-ps
+```
+
+Or use raw Docker Compose commands:
+
+```bash
 docker compose up -d
+docker compose ps
 ```
 
 For Qdrant support:
@@ -240,4 +248,15 @@ or:
 
 ```bash
 mkdocs build
+```
+
+## Useful Make targets
+
+```bash
+make help
+make test
+make test-vector
+make test-vector-host
+make test-pgvector-host
+make compose-down
 ```

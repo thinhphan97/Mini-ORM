@@ -3,11 +3,11 @@ from __future__ import annotations
 import importlib
 import os
 import tempfile
-import time
 import unittest
 from unittest.mock import patch
 
 from mini_orm import ChromaVectorStore, VectorMetric, VectorRecord, VectorRepository
+from tests.vector_test_helpers import wait_for_service_or_skip
 
 
 def _module_available(name: str) -> bool:
@@ -140,26 +140,18 @@ class ChromaHostVectorFlowTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.chroma_host = os.getenv("MINI_ORM_CHROMA_HOST", "localhost")
         cls.chroma_port = int(os.getenv("MINI_ORM_CHROMA_PORT", "8000"))
-        last_exc: Exception | None = None
-        for _ in range(20):
-            try:
-                store = ChromaVectorStore(host=cls.chroma_host, port=cls.chroma_port)
-                cls.repo = VectorRepository(
-                    store,
-                    "chroma_host_users",
-                    dimension=3,
-                    metric=VectorMetric.COSINE,
-                    auto_create=True,
-                    overwrite=True,
-                )
-                return
-            except Exception as exc:
-                last_exc = exc
-                time.sleep(1)
-
-        raise unittest.SkipTest(
-            f"Chroma host is not reachable at {cls.chroma_host}:{cls.chroma_port}: {last_exc}"
-        ) from last_exc
+        cls.repo = wait_for_service_or_skip(
+            service_name="Chroma",
+            endpoint=f"{cls.chroma_host}:{cls.chroma_port}",
+            initializer=lambda: VectorRepository(
+                ChromaVectorStore(host=cls.chroma_host, port=cls.chroma_port),
+                "chroma_host_users",
+                dimension=3,
+                metric=VectorMetric.COSINE,
+                auto_create=True,
+                overwrite=True,
+            ),
+        )
 
     def test_chroma_host_flow(self) -> None:
         self.repo.upsert(

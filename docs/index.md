@@ -158,7 +158,8 @@ asyncio.run(main())
 ## Run tests
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"
+make test
+make test-vector
 ```
 
 ## Continue reading

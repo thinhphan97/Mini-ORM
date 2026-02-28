@@ -10,7 +10,7 @@ from mini_orm import FaissVectorStore, VectorMetric, VectorRecord, VectorReposit
 def _module_available(name: str) -> bool:
     try:
         importlib.import_module(name)
-    except Exception:
+    except ImportError:
         return False
     return True
 

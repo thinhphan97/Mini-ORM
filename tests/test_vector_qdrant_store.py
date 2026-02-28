@@ -3,11 +3,12 @@ from __future__ import annotations
 import importlib
 import os
 import tempfile
-import time
 import unittest
+from urllib.parse import urlparse
 from unittest.mock import patch
 
 from mini_orm import QdrantVectorStore, VectorMetric, VectorRecord, VectorRepository
+from tests.vector_test_helpers import wait_for_service_or_skip
 
 
 def _module_available(name: str) -> bool:
@@ -177,26 +178,23 @@ class QdrantHostVectorFlowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.qdrant_url = os.getenv("MINI_ORM_QDRANT_URL", "http://localhost:6333")
-        last_exc: Exception | None = None
-        for _ in range(20):
-            try:
-                store = QdrantVectorStore(url=cls.qdrant_url, timeout=5.0)
-                cls.repo = VectorRepository(
-                    store,
-                    "qdrant_host_users",
-                    dimension=3,
-                    metric=VectorMetric.COSINE,
-                    auto_create=True,
-                    overwrite=True,
-                )
-                return
-            except Exception as exc:
-                last_exc = exc
-                time.sleep(1)
+        parsed = urlparse(cls.qdrant_url)
+        endpoint_host = parsed.hostname or "localhost"
+        endpoint_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        endpoint = f"{endpoint_host}:{endpoint_port}"
 
-        raise unittest.SkipTest(
-            f"Qdrant host is not reachable at {cls.qdrant_url}: {last_exc}"
-        ) from last_exc
+        cls.repo = wait_for_service_or_skip(
+            service_name="Qdrant",
+            endpoint=endpoint,
+            initializer=lambda: VectorRepository(
+                QdrantVectorStore(url=cls.qdrant_url, timeout=5.0),
+                "qdrant_host_users",
+                dimension=3,
+                metric=VectorMetric.COSINE,
+                auto_create=True,
+                overwrite=True,
+            ),
+        )
 
     def test_qdrant_host_flow(self) -> None:
         u1 = "11111111-1111-1111-1111-111111111111"

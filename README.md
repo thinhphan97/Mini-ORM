@@ -1,6 +1,6 @@
 # mini_orm
 
-Lightweight Python ORM-style toolkit
+Lightweight Python ORM-style toolkit.
 
 ## What it supports
 
@@ -9,9 +9,10 @@ Lightweight Python ORM-style toolkit
 - Single-table CRUD via `Repository[T]`.
 - Multi-table routing via one hub object: `UnifiedRepository`
   (model-class routing, with object-only mutation support).
-- Optional auto schema sync on first action (or during `register(...)`): `auto_schema=True` (with `schema_conflict` policy).
+- Optional schema auto-sync on first action (or during `register(...)`):
+  `auto_schema=True` (with `schema_conflict` policy).
 - Optional strict table registry before actions: `require_registration=True` + `register(...)`.
-- Model relations inferred from `fk` metadata (or explicit `__relations__` override) with:
+- Model relations inferred from `fk` metadata (or explicit `__relations__` override), including:
   - create with nested relation data (`repo.create(..., relations=...)`)
   - eager loading (`get_related`, `list_related`)
 - Safe query building (`where`, `AND/OR/NOT`, `order by`, `limit`, `offset`).
@@ -49,27 +50,29 @@ Lightweight Python ORM-style toolkit
 
 ## Docker Compose (services for examples/tests)
 
-The repository includes `docker-compose.yml` with required external services:
+The repository includes `docker-compose.yml` for the external services used by examples and integration tests:
 
 - `postgres` (`pgvector/pgvector:pg16`) for Postgres + PgVector examples.
 - `mysql` (`mysql:8.4`) for MySQL examples.
-- `qdrant` (`qdrant/qdrant:latest`) for host-server Qdrant tests.
-- `chroma` (`chromadb/chroma:latest`) for host-server Chroma tests.
+- `qdrant` (`qdrant/qdrant:v1.17`) for host-server Qdrant tests.
+- `chroma` (`chromadb/chroma:1.5.2`) for host-server Chroma tests.
 
-Run services:
-
-```bash
-docker compose up -d
-docker compose ps
-```
-
-Stop and remove:
+Start services:
 
 ```bash
-docker compose down
+make compose-up
+make compose-ps
 ```
 
-Use the same env variables already read by examples:
+Stop services:
+
+```bash
+make compose-down
+# reset all compose volumes:
+make compose-reset
+```
+
+Environment variables read by examples/tests:
 
 ```bash
 export MINI_ORM_PG_HOST=localhost
@@ -92,12 +95,28 @@ export MINI_ORM_CHROMA_PORT=8000
 export MINI_ORM_CHROMA_HOST=localhost
 ```
 
-Enable host-server vector integration tests (Qdrant/Chroma):
+## Run tests with Makefile
 
 ```bash
-export MINI_ORM_VECTOR_HOST_TESTS=1
-python -m unittest tests.test_vector_qdrant_store tests.test_vector_chroma_store
+make test
+make test-vector
 ```
+
+Run host-server vector integration tests (Qdrant/Chroma/PgVector):
+
+```bash
+make test-vector-host
+```
+
+Run only the PgVector host SQL+vector integration test:
+
+```bash
+make test-pgvector-host
+```
+
+Notes:
+- `test-vector-host` and `test-pgvector-host` already set `MINI_ORM_VECTOR_HOST_TESTS=1`.
+- For PgVector host tests, make sure PostgreSQL env is set (`MINI_ORM_PG_HOST`, `MINI_ORM_PG_PORT`, `MINI_ORM_PG_USER`, `MINI_ORM_PG_PASSWORD`, `MINI_ORM_PG_DATABASE`).
 
 ## Quick usage (SQL)
 
@@ -388,21 +407,21 @@ asyncio.run(main())
 ## Run tests
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"
+make test
+make test-vector
 ```
 
 ## Build library
 
 ```bash
-pip install -r requirements-build.txt
-./scripts/build_lib.sh
+make build-lib
 ```
 
 ## Publish library
 
 ```bash
-pip install -r requirements-publish.txt
-python3 -m twine upload dist/*
+make release-check
+make release-lib
 ```
 
 ## MySQL note

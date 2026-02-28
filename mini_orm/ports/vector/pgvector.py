@@ -33,6 +33,7 @@ _METRIC_OPERATOR = {
 }
 
 _VECTOR_TYPE_RE = re.compile(r"^vector\((\d+)\)$")
+_COLLECTIONS_META_TABLE = "_miniorm_pgvector_collections"
 
 
 @dataclass
@@ -40,7 +41,7 @@ class _CollectionState:
     schema: str | None
     table: str
     dimension: int
-    metric: VectorMetric
+    metric: VectorMetric | None
 
 
 class PgVectorStore:
@@ -87,6 +88,7 @@ class PgVectorStore:
         with self._db.transaction():
             if self._ensure_extension:
                 self._db.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+            self._ensure_collections_metadata_table()
             if exists:
                 self._db.execute(f"DROP TABLE {qualified_table};")
             self._db.execute(
@@ -95,6 +97,12 @@ class PgVectorStore:
                 "embedding" vector({dimension}) NOT NULL,
                 "payload" JSONB
             );"""
+            )
+            self._upsert_collection_metadata(
+                schema=schema,
+                table=table,
+                metric=normalized_metric,
+                dimension=dimension,
             )
 
         self._collections[name] = _CollectionState(
@@ -154,6 +162,12 @@ class PgVectorStore:
             raise ValueError(
                 f"Vector dimension mismatch: expected {state.dimension}, "
                 f"got {len(query_vector)}"
+            )
+        if state.metric is None:
+            raise ValueError(
+                f"Collection {collection!r} metric metadata is missing. "
+                "Recreate collection via create_collection(..., overwrite=True) "
+                "to store metric metadata."
             )
 
         operator = _METRIC_OPERATOR[state.metric]
@@ -269,10 +283,52 @@ class PgVectorStore:
             schema=schema,
             table=table,
             dimension=dimension,
-            metric=VectorMetric.COSINE,
+            metric=self._resolve_metric(schema, table),
         )
         self._collections[collection] = state
         return state
+
+    def _ensure_collections_metadata_table(self) -> None:
+        metadata_table = self._quote_identifier(_COLLECTIONS_META_TABLE)
+        self._db.execute(
+            f"""CREATE TABLE IF NOT EXISTS {metadata_table} (
+            "collection_schema" TEXT NOT NULL,
+            "collection_table" TEXT NOT NULL,
+            "metric" TEXT NOT NULL,
+            "dimension" INTEGER NOT NULL,
+            PRIMARY KEY ("collection_schema", "collection_table")
+        );"""
+        )
+
+    def _upsert_collection_metadata(
+        self,
+        *,
+        schema: str | None,
+        table: str,
+        metric: VectorMetric,
+        dimension: int,
+    ) -> None:
+        effective_schema = self._effective_schema(schema)
+        metadata_table = self._quote_identifier(_COLLECTIONS_META_TABLE)
+        sql = (
+            f"INSERT INTO {metadata_table} "
+            '("collection_schema", "collection_table", "metric", "dimension") '
+            f"VALUES ({self._placeholder('collection_schema')}, "
+            f"{self._placeholder('collection_table')}, "
+            f"{self._placeholder('metric')}, {self._placeholder('dimension')}) "
+            'ON CONFLICT ("collection_schema", "collection_table") DO UPDATE SET '
+            '"metric" = EXCLUDED."metric", '
+            '"dimension" = EXCLUDED."dimension";'
+        )
+        self._db.execute(
+            sql,
+            self._build_params(
+                ("collection_schema", effective_schema),
+                ("collection_table", table),
+                ("metric", metric.value),
+                ("dimension", int(dimension)),
+            ),
+        )
 
     def _table_exists(self, schema: str | None, table: str) -> bool:
         if schema is None:
@@ -325,6 +381,64 @@ class PgVectorStore:
         if match is None:
             return None
         return int(match.group(1))
+
+    def _resolve_metric(self, schema: str | None, table: str) -> VectorMetric | None:
+        effective_schema = self._effective_schema(schema)
+        metadata_table = self._quote_identifier(_COLLECTIONS_META_TABLE)
+        sql = (
+            'SELECT "metric" '
+            f"FROM {metadata_table} "
+            f'WHERE "collection_schema" = {self._placeholder("collection_schema")} '
+            f'AND "collection_table" = {self._placeholder("collection_table")} '
+            "LIMIT 1;"
+        )
+        try:
+            row = self._db.fetchone(
+                sql,
+                self._build_params(
+                    ("collection_schema", effective_schema),
+                    ("collection_table", table),
+                ),
+            )
+        except Exception:
+            return None
+
+        if row is None:
+            return None
+
+        raw_metric = self._row_get(row, "metric")
+        if raw_metric is None:
+            return None
+
+        try:
+            return normalize_vector_metric(
+                str(raw_metric),
+                supported=_SUPPORTED_METRICS,
+                aliases={"euclid": VectorMetric.L2},
+            )
+        except ValueError as exc:
+            raise ValueError(
+                f"Collection metric metadata for {effective_schema}.{table} "
+                f"is invalid: {raw_metric!r}"
+            ) from exc
+
+    def _current_schema(self) -> str:
+        row = self._db.fetchone("SELECT current_schema() AS schema_name;")
+        if row is None:
+            raise RuntimeError("Unable to resolve current PostgreSQL schema.")
+        schema_name = self._row_get(
+            row,
+            "schema_name",
+            self._row_get(row, "current_schema"),
+        )
+        if not schema_name:
+            raise RuntimeError("Unable to resolve current PostgreSQL schema.")
+        return str(schema_name)
+
+    def _effective_schema(self, schema: str | None) -> str:
+        if schema is not None:
+            return schema
+        return self._current_schema()
 
     def _placeholder(self, key: str) -> str:
         return self._db.dialect.placeholder(key)
