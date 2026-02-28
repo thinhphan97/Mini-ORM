@@ -82,16 +82,21 @@ def publish_pending_messages(session: Session) -> None:
         order_by=[OrderBy("id")],
     )
     for message in pending:
-        print("Publishing:", message.event_type, message.payload)
         with session.begin():
-            session.update_where(
+            updated = session.update_where(
                 OutboxMessage,
                 {
                     "status": "published",
                     "published_at": datetime.now(timezone.utc).isoformat(),
                 },
-                where=C.eq("id", message.id),
+                where=C.and_(
+                    C.eq("id", message.id),
+                    C.eq("status", "pending"),
+                ),
             )
+            if updated == 0:
+                continue
+            print("Publishing:", message.event_type, message.payload)
 
 
 def main() -> None:
