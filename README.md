@@ -30,6 +30,8 @@ Lightweight Python ORM-style toolkit.
 - SQL dialect adapters: SQLite, Postgres, MySQL (DB-API style).
 - Async SQL APIs with same repository method names:
   - `AsyncDatabase`, `AsyncRepository[T]`, `AsyncUnifiedRepository`, `apply_schema_async(...)`
+- Session API for transaction-scoped multi-model workflows:
+  - `Session`, `AsyncSession`
 - Async vector APIs with same repository method names:
   - `AsyncVectorRepository`
 - Vector abstraction via `VectorRepository`:
@@ -182,6 +184,32 @@ hub = UnifiedRepository(db, auto_schema=True, require_registration=True)
 hub.register_many([User])
 hub.insert(User(email="alice@example.com"))  # model inferred from object
 rows = hub.list(User)
+```
+
+## Quick usage (Session)
+
+```python
+from mini_orm import Session
+
+session = Session(db, auto_schema=True)
+with session:
+    alice = session.insert(User(email="alice@example.com"))
+    _ = session.insert(User(email="bob@example.com"))
+
+rows = session.list(User)
+```
+
+Async session:
+
+```python
+from mini_orm import AsyncSession
+
+async def main() -> None:
+    session = AsyncSession(async_db, auto_schema=True)
+    async with session:
+        await session.insert(User(email="alice@example.com"))
+        await session.insert(User(email="bob@example.com"))
+    rows = await session.list(User)
 ```
 
 ## SQL Repository Args (Sync + Async)
@@ -445,3 +473,9 @@ mkdocs serve
 ```
 
 More docs are in `docs/`.
+
+## Disclaimer
+
+This codebase is provided for learning and educational purposes only.
+The author/maintainers are not liable for any incidents, data loss, or damages
+resulting from using, integrating, or deploying this code in real environments.

@@ -79,6 +79,38 @@ Connection settings are read from environment variables (see project `README.md`
     overflow: auto;
   }
 
+  .examples-source code {
+    display: block;
+    color: var(--md-code-fg-color);
+  }
+
+  .examples-source code .tok-keyword {
+    color: #c678dd;
+    font-weight: 600;
+  }
+
+  .examples-source code .tok-builtin {
+    color: #56b6c2;
+    font-weight: 600;
+  }
+
+  .examples-source code .tok-string {
+    color: #98c379;
+  }
+
+  .examples-source code .tok-comment {
+    color: #7f8c8d;
+    font-style: italic;
+  }
+
+  .examples-source code .tok-number {
+    color: #d19a66;
+  }
+
+  .examples-source code .tok-decorator {
+    color: #e5c07b;
+  }
+
   .examples-sidebar {
     position: static;
     margin-top: 14px;
@@ -343,6 +375,28 @@ Connection settings are read from environment variables (see project `README.md`
             "Requires Postgres + pgvector and psycopg/psycopg2",
           ],
         },
+        {
+          id: "sql-17",
+          title: "17 Session Usage",
+          path: "examples/sql/17_session_usage.py",
+          command: "python examples/sql/17_session_usage.py",
+          summary: [
+            "Session and AsyncSession wrappers",
+            "Transaction commit and rollback behavior",
+            "Session-level auto_schema flow",
+          ],
+        },
+        {
+          id: "sql-18",
+          title: "18 Outbox Pattern",
+          path: "examples/sql/18_outbox_pattern.py",
+          command: "python examples/sql/18_outbox_pattern.py",
+          summary: [
+            "Transactional outbox with Session",
+            "Business row and outbox message in one commit",
+            "Rollback simulation and publisher step",
+          ],
+        },
       ],
     },
     {
@@ -485,6 +539,13 @@ Connection settings are read from environment variables (see project `README.md`
   const browserRoot = document.querySelector(".examples-browser");
   const sidebar = document.getElementById("examples-sidebar");
   const sourceStore = window.MINI_ORM_EXAMPLE_SOURCES || {};
+  const PYTHON_KEYWORDS = new Set([
+    "and", "as", "assert", "async", "await", "break", "class", "continue",
+    "def", "del", "elif", "else", "except", "finally", "for", "from", "global",
+    "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass",
+    "raise", "return", "try", "while", "with", "yield", "match", "case",
+  ]);
+  const PYTHON_BUILTINS = new Set(["True", "False", "None"]);
 
   function dockExamplesLayer() {
     const secondarySidebar = document.querySelector(".md-sidebar--secondary .md-sidebar__scrollwrap");
@@ -504,6 +565,122 @@ Connection settings are read from environment variables (see project `README.md`
     }
   }
 
+  function escapeHtml(text) {
+    return text
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+  }
+
+  function isIdentifierStart(ch) {
+    return /[A-Za-z_]/.test(ch);
+  }
+
+  function isIdentifierPart(ch) {
+    return /[A-Za-z0-9_]/.test(ch);
+  }
+
+  function isDigit(ch) {
+    return /[0-9]/.test(ch);
+  }
+
+  function readStringToken(source, start, quote) {
+    const triple = source.slice(start, start + 3) === quote.repeat(3);
+    let i = start + (triple ? 3 : 1);
+
+    while (i < source.length) {
+      if (triple && source.slice(i, i + 3) === quote.repeat(3)) {
+        i += 3;
+        break;
+      }
+      if (!triple && source[i] === quote) {
+        i += 1;
+        break;
+      }
+      if (source[i] === "\\") {
+        i += 2;
+        continue;
+      }
+      i += 1;
+    }
+
+    return { value: source.slice(start, i), end: i };
+  }
+
+  function readIdentifier(source, start) {
+    let i = start;
+    while (i < source.length && isIdentifierPart(source[i])) {
+      i += 1;
+    }
+    return { value: source.slice(start, i), end: i };
+  }
+
+  function readNumber(source, start) {
+    let i = start;
+    while (i < source.length && /[0-9A-Fa-f_xob\.]/.test(source[i])) {
+      i += 1;
+    }
+    return { value: source.slice(start, i), end: i };
+  }
+
+  function highlightPythonBasic(source) {
+    let i = 0;
+    let highlighted = "";
+
+    while (i < source.length) {
+      const ch = source[i];
+
+      if (ch === "#") {
+        let end = i;
+        while (end < source.length && source[end] !== "\n") {
+          end += 1;
+        }
+        highlighted += `<span class="tok-comment">${escapeHtml(source.slice(i, end))}</span>`;
+        i = end;
+        continue;
+      }
+
+      if (ch === "'" || ch === "\"") {
+        const token = readStringToken(source, i, ch);
+        highlighted += `<span class="tok-string">${escapeHtml(token.value)}</span>`;
+        i = token.end;
+        continue;
+      }
+
+      if (ch === "@" && (i === 0 || source[i - 1] === "\n")) {
+        const token = readIdentifier(source, i + 1);
+        highlighted += `<span class="tok-decorator">@${escapeHtml(token.value)}</span>`;
+        i = token.end;
+        continue;
+      }
+
+      if (isDigit(ch)) {
+        const token = readNumber(source, i);
+        highlighted += `<span class="tok-number">${escapeHtml(token.value)}</span>`;
+        i = token.end;
+        continue;
+      }
+
+      if (isIdentifierStart(ch)) {
+        const token = readIdentifier(source, i);
+        if (PYTHON_KEYWORDS.has(token.value)) {
+          highlighted += `<span class="tok-keyword">${token.value}</span>`;
+        } else if (PYTHON_BUILTINS.has(token.value)) {
+          highlighted += `<span class="tok-builtin">${token.value}</span>`;
+        } else {
+          highlighted += escapeHtml(token.value);
+        }
+        i = token.end;
+        continue;
+      }
+
+      highlighted += escapeHtml(ch);
+      i += 1;
+    }
+
+    return highlighted;
+  }
+
   function renderSourceCode(path) {
     panelSourcePath.textContent = path;
     const source = sourceStore[path];
@@ -511,7 +688,22 @@ Connection settings are read from environment variables (see project `README.md`
       panelSourceCode.textContent = `Source not available for ${path}`;
       return;
     }
-    panelSourceCode.textContent = source;
+
+    const hljs = window.hljs;
+    if (hljs && typeof hljs.highlight === "function") {
+      try {
+        const result = hljs.highlight(source, {
+          language: "python",
+          ignoreIllegals: true,
+        });
+        panelSourceCode.innerHTML = result.value;
+        return;
+      } catch (_err) {
+        // Fallback to basic highlighter below.
+      }
+    }
+
+    panelSourceCode.innerHTML = highlightPythonBasic(source);
   }
 
   function renderExample(exampleId) {

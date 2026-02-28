@@ -36,6 +36,14 @@
 
 ::: mini_orm.core.repositories.repository_async
 
+## `mini_orm.core.session`
+
+::: mini_orm.core.session
+
+## `mini_orm.core.session_async`
+
+::: mini_orm.core.session_async
+
 ## `mini_orm.core.vectors.vector_types`
 
 ::: mini_orm.core.vectors.vector_types
