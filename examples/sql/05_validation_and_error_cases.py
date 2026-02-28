@@ -3,36 +3,22 @@
 from __future__ import annotations
 
 import sqlite3
-import sys
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
-
-# Allow running this script directly from repository root.
-PROJECT_ROOT = next(
-    (parent for parent in Path(__file__).resolve().parents if (parent / "mini_orm").exists()),
-    None,
-)
-if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from mini_orm import C, Database, Repository, SQLiteDialect, apply_schema
 
-
 class PlainModel:
     """Intentionally not a dataclass."""
-
 
 @dataclass
 class NoPkModel:
     email: str = ""
 
-
 @dataclass
 class MultiPkModel:
     id1: int = field(default=0, metadata={"pk": True})
     id2: int = field(default=0, metadata={"pk": True})
-
 
 @dataclass
 class User:
@@ -40,11 +26,9 @@ class User:
     email: str = ""
     age: Optional[int] = None
 
-
 @dataclass
 class OnlyPkModel:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
-
 
 def expect_error(label: str, fn) -> None:  # noqa: ANN001
     try:
@@ -53,7 +37,6 @@ def expect_error(label: str, fn) -> None:  # noqa: ANN001
         print(f"[OK] {label}: {type(exc).__name__}: {exc}")
     else:
         print(f"[UNEXPECTED] {label}: no exception raised")
-
 
 def main() -> None:
     conn = sqlite3.connect(":memory:")
@@ -98,7 +81,6 @@ def main() -> None:
         expect_error("update rejected when no writable columns", lambda: only_pk_repo.update(only))
     finally:
         conn.close()
-
 
 if __name__ == "__main__":
     main()

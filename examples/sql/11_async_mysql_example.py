@@ -6,21 +6,10 @@ import asyncio
 import importlib
 import os
 import re
-import sys
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Optional
 
-# Allow running this script directly from repository root.
-PROJECT_ROOT = next(
-    (parent for parent in Path(__file__).resolve().parents if (parent / "mini_orm").exists()),
-    None,
-)
-if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 from mini_orm import AsyncDatabase, AsyncRepository, MySQLDialect
-
 
 def _load_mysql_driver() -> tuple[str, Any] | tuple[None, None]:
     for module_name in ("MySQLdb", "pymysql", "mysql.connector"):
@@ -32,7 +21,6 @@ def _load_mysql_driver() -> tuple[str, Any] | tuple[None, None]:
         if connect is not None:
             return module_name, connect
     return None, None
-
 
 def _mysql_connect(
     *,
@@ -70,13 +58,11 @@ def _mysql_connect(
         database=database,
     )
 
-
 @dataclass
 class User:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
     email: str = ""
     age: Optional[int] = None
-
 
 async def main() -> None:
     driver_name, connect = _load_mysql_driver()
@@ -159,7 +145,6 @@ async def main() -> None:
         print("After delete:", await repo.list())
     finally:
         conn.close()
-
 
 if __name__ == "__main__":
     asyncio.run(main())

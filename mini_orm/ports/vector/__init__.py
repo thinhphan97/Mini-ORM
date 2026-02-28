@@ -17,9 +17,12 @@ try:  # pragma: no cover - depends on optional dependency
 except ImportError:  # pragma: no cover - import side effect control
     QdrantVectorStore = None  # type: ignore[assignment]
 
+from .pgvector import PgVectorStore
+
 __all__ = [
     "InMemoryVectorStore",
     "QdrantVectorStore",
     "ChromaVectorStore",
     "FaissVectorStore",
+    "PgVectorStore",
 ]

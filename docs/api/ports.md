@@ -20,6 +20,10 @@
 
 ::: mini_orm.ports.vector.in_memory
 
+## `mini_orm.ports.vector.pgvector`
+
+::: mini_orm.ports.vector.pgvector
+
 ## `mini_orm.ports.vector.qdrant`
 
 ::: mini_orm.ports.vector.qdrant

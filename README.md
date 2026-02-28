@@ -1,6 +1,6 @@
 # mini_orm
 
-Lightweight Python ORM-style toolkit
+Lightweight Python ORM-style toolkit.
 
 ## What it supports
 
@@ -9,9 +9,10 @@ Lightweight Python ORM-style toolkit
 - Single-table CRUD via `Repository[T]`.
 - Multi-table routing via one hub object: `UnifiedRepository`
   (model-class routing, with object-only mutation support).
-- Optional auto schema sync on first action (or during `register(...)`): `auto_schema=True` (with `schema_conflict` policy).
+- Optional schema auto-sync on first action (or during `register(...)`):
+  `auto_schema=True` (with `schema_conflict` policy).
 - Optional strict table registry before actions: `require_registration=True` + `register(...)`.
-- Model relations inferred from `fk` metadata (or explicit `__relations__` override) with:
+- Model relations inferred from `fk` metadata (or explicit `__relations__` override), including:
   - create with nested relation data (`repo.create(..., relations=...)`)
   - eager loading (`get_related`, `list_related`)
 - Safe query building (`where`, `AND/OR/NOT`, `order by`, `limit`, `offset`).
@@ -33,6 +34,7 @@ Lightweight Python ORM-style toolkit
   - `AsyncVectorRepository`
 - Vector abstraction via `VectorRepository`:
   - `InMemoryVectorStore` (built-in)
+  - `PgVectorStore` (PostgreSQL + pgvector extension)
   - `QdrantVectorStore` (optional, requires `qdrant-client`)
   - `ChromaVectorStore` (optional, requires `chromadb`)
   - `FaissVectorStore` (optional, requires `faiss-cpu` and `numpy`)
@@ -41,10 +43,80 @@ Lightweight Python ORM-style toolkit
     - Enum decode is best-effort (falls back to scalar if enum class is not resolvable at runtime)
   - ID policy:
     - Qdrant requires UUID string IDs.
-    - InMemory/Chroma/Faiss accept generic string IDs.
+    - InMemory/PgVector/Chroma/Faiss accept generic string IDs.
   - Filter policy (`query(..., filters={...})`):
-    - InMemory/Chroma/Qdrant support basic payload equality filters.
+    - InMemory/PgVector/Chroma/Qdrant support basic payload equality filters.
     - Faiss does not support payload filters and raises `NotImplementedError`.
+
+## Docker Compose (services for examples/tests)
+
+The repository includes `docker-compose.yml` for the external services used by examples and integration tests:
+
+- `postgres` (`pgvector/pgvector:pg16`) for Postgres + PgVector examples.
+- `mysql` (`mysql:8.4`) for MySQL examples.
+- `qdrant` (`qdrant/qdrant:v1.17`) for host-server Qdrant tests.
+- `chroma` (`chromadb/chroma:1.5.2`) for host-server Chroma tests.
+
+Start services:
+
+```bash
+make compose-up
+make compose-ps
+```
+
+Stop services:
+
+```bash
+make compose-down
+# reset all compose volumes:
+make compose-reset
+```
+
+Environment variables read by examples/tests:
+
+```bash
+export MINI_ORM_PG_HOST=localhost
+export MINI_ORM_PG_PORT=5432
+export MINI_ORM_PG_USER=postgres
+export MINI_ORM_PG_PASSWORD=password
+export MINI_ORM_PG_DATABASE=postgres
+
+export MINI_ORM_MYSQL_HOST=localhost
+export MINI_ORM_MYSQL_PORT=3306
+export MINI_ORM_MYSQL_USER=root
+export MINI_ORM_MYSQL_PASSWORD=password
+export MINI_ORM_MYSQL_DATABASE=mini_orm_test
+
+export MINI_ORM_QDRANT_HTTP_PORT=6333
+export MINI_ORM_QDRANT_GRPC_PORT=6334
+export MINI_ORM_QDRANT_URL=http://localhost:6333
+
+export MINI_ORM_CHROMA_PORT=8000
+export MINI_ORM_CHROMA_HOST=localhost
+```
+
+## Run tests with Makefile
+
+```bash
+make test
+make test-vector
+```
+
+Run host-server vector integration tests (Qdrant/Chroma/PgVector):
+
+```bash
+make test-vector-host
+```
+
+Run only the PgVector host SQL+vector integration test:
+
+```bash
+make test-pgvector-host
+```
+
+Notes:
+- `test-vector-host` and `test-pgvector-host` already set `MINI_ORM_VECTOR_HOST_TESTS=1`.
+- For PgVector host tests, make sure PostgreSQL env is set (`MINI_ORM_PG_HOST`, `MINI_ORM_PG_PORT`, `MINI_ORM_PG_USER`, `MINI_ORM_PG_PASSWORD`, `MINI_ORM_PG_DATABASE`).
 
 ## Quick usage (SQL)
 
@@ -335,21 +407,21 @@ asyncio.run(main())
 ## Run tests
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"
+make test
+make test-vector
 ```
 
 ## Build library
 
 ```bash
-pip install -r requirements-build.txt
-./scripts/build_lib.sh
+make build-lib
 ```
 
 ## Publish library
 
 ```bash
-pip install -r requirements-publish.txt
-python3 -m twine upload dist/*
+make release-check
+make release-lib
 ```
 
 ## MySQL note

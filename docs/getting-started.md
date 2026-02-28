@@ -4,13 +4,29 @@
 
 - Python 3.10+
 
-## Install project dependencies
+## Install documentation dependencies
 
 ```bash
 pip install -r requirements-docs.txt
 ```
 
 For runtime SQL usage, install your DB-API driver (for example `sqlite3` is built in, `psycopg`, `mysqlclient`, etc.).
+
+For Postgres/MySQL/Qdrant/Chroma examples and integration tests that need
+running database services, you can start
+the bundled compose stack:
+
+```bash
+make compose-up
+make compose-ps
+```
+
+Or use raw Docker Compose commands:
+
+```bash
+docker compose up -d
+docker compose ps
+```
 
 For Qdrant support:
 
@@ -232,4 +248,15 @@ or:
 
 ```bash
 mkdocs build
+```
+
+## Useful Make targets
+
+```bash
+make help
+make test
+make test-vector
+make test-vector-host
+make test-pgvector-host
+make compose-down
 ```

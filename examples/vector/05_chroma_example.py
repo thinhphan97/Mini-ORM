@@ -2,19 +2,7 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-# Allow running this script directly from repository root.
-PROJECT_ROOT = next(
-    (parent for parent in Path(__file__).resolve().parents if (parent / "mini_orm").exists()),
-    None,
-)
-if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 from mini_orm import ChromaVectorStore, VectorMetric, VectorRecord, VectorRepository
-
 
 def metric_preview(metric: VectorMetric) -> None:
     store = ChromaVectorStore(path=":memory:")
@@ -34,7 +22,6 @@ def metric_preview(metric: VectorMetric) -> None:
         ]
     )
     print(f"Metric={metric.value} ->", [hit.id for hit in repo.query([1.0, 0.0], top_k=3)])
-
 
 def main() -> None:
     try:
@@ -81,7 +68,6 @@ def main() -> None:
 
     # For persistent local storage:
     # persistent_store = ChromaVectorStore(path="./.chroma")
-
 
 if __name__ == "__main__":
     main()

@@ -28,6 +28,7 @@ Lightweight Python ORM-style toolkit.
 - SQL dialect adapters: SQLite, Postgres, MySQL.
 - Vector abstraction via `VectorRepository` / `AsyncVectorRepository`:
   - `InMemoryVectorStore` (built-in)
+  - `PgVectorStore` (PostgreSQL + pgvector extension)
   - `QdrantVectorStore` (optional, requires `qdrant-client`)
   - `ChromaVectorStore` (optional, requires `chromadb`)
   - `FaissVectorStore` (optional, requires `faiss-cpu` and `numpy`)
@@ -157,12 +158,14 @@ asyncio.run(main())
 ## Run tests
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"
+make test
+make test-vector
 ```
 
 ## Continue reading
 
 - [Getting Started](getting-started.md)
+- [Examples](examples.md)
 - [SQL Overview](sql/overview.md)
 - [Vector Overview](vector/overview.md)
 - [API Reference](api/package.md)
