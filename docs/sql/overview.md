@@ -8,6 +8,7 @@
 4. Use `Repository[T]` for single-model access, or `UnifiedRepository` when one
    hub object should route by model class.
    Mutation methods can infer model from object (`hub.insert(User(...))`).
+   Optionally use `Session` to keep one transaction scope while still using unified routing.
    Optionally set `auto_schema=True` to create/sync schema automatically on first action
    (or when calling `register(...)`).
    Set `require_registration=True` if you want explicit model registration before actions.
@@ -21,6 +22,7 @@
    for one async hub object routing by model class, with the same method names as sync
    (`insert`, `get`, `list`, `update`, `delete`, ...), but with `await`.
    Async unified mutation methods can infer model from object as well.
+   Optionally use `AsyncSession` for one async transaction scope + unified routing.
    Optionally set `auto_schema=True` for automatic schema ensure on first action
    (or when calling `register(...)`).
    Set `require_registration=True` for explicit registration workflow.
@@ -51,6 +53,27 @@ async def main() -> None:
     print(user, rows)
 
 asyncio.run(main())
+```
+
+## Session wrapper (transaction + unified hub)
+
+```python
+from mini_orm import Session, AsyncSession
+
+# sync
+session = Session(db, auto_schema=True)
+with session:
+    session.insert(User(email="alice@example.com"))
+    session.insert(User(email="bob@example.com"))
+rows = session.list(User)
+
+# async
+async def run() -> None:
+    async_session = AsyncSession(async_db, auto_schema=True)
+    async with async_session:
+        await async_session.insert(User(email="alice@example.com"))
+        await async_session.insert(User(email="bob@example.com"))
+    rows = await async_session.list(User)
 ```
 
 `schema_conflict` controls incompatible changes:

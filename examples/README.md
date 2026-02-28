@@ -38,6 +38,8 @@ python examples/sql/13_async_unified_repository.py
 python examples/sql/14_validated_model.py
 python examples/sql/15_validated_repository_sqlite.py
 python examples/sql/16_postgres_pgvector_integration.py
+python examples/sql/17_session_usage.py
+python examples/sql/18_outbox_pattern.py
 
 python examples/vector/01_inmemory_basic.py
 python examples/vector/02_inmemory_metrics_and_filters.py
@@ -148,6 +150,16 @@ Connection settings are read from environment variables (see the repository `REA
     - SQL `Repository` (CRUD)
     - `PgVectorStore` + `VectorRepository` (vector search)
   - Requires a running PostgreSQL server with pgvector, plus `psycopg`/`psycopg2`.
+
+- `examples/sql/17_session_usage.py`
+  - Demonstrates `Session` and `AsyncSession` wrappers.
+  - Runs multi-step transactions with commit and rollback behavior.
+  - Uses `auto_schema=True` on session-level unified hub.
+
+- `examples/sql/18_outbox_pattern.py`
+  - Demonstrates transactional outbox pattern with `Session`.
+  - Persists domain row + outbox message in the same transaction.
+  - Includes rollback simulation and a publisher step that marks events as published.
 
 ## Vector examples
 

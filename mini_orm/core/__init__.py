@@ -18,6 +18,8 @@ from .validated_model import ValidatedModel, ValidationError
 from .repositories.repository import RelatedResult, Repository, UnifiedRepository
 from .repositories.repository_async import AsyncRepository, AsyncUnifiedRepository
 from .repositories.repository_relations_async import AsyncRelatedResult
+from .session import Session
+from .session_async import AsyncSession
 from .schemas.schema import (
     IndexSpec,
     apply_schema,
@@ -59,6 +61,8 @@ __all__ = [
     "AsyncUnifiedRepository",
     "RelatedResult",
     "AsyncRelatedResult",
+    "Session",
+    "AsyncSession",
     "VectorMetric",
     "VectorMetricInput",
     "VectorIdPolicy",
