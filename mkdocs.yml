@@ -47,6 +47,7 @@ nav:
       - Repository Queries: sql/repository.md
   - Vector:
       - Overview: vector/overview.md
+      - PgVector Adapter: vector/pgvector.md
       - Qdrant Adapter: vector/qdrant.md
       - Chroma Adapter: vector/chroma.md
       - Faiss Adapter: vector/faiss.md

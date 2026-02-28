@@ -33,6 +33,7 @@ Lightweight Python ORM-style toolkit
   - `AsyncVectorRepository`
 - Vector abstraction via `VectorRepository`:
   - `InMemoryVectorStore` (built-in)
+  - `PgVectorStore` (PostgreSQL + pgvector extension)
   - `QdrantVectorStore` (optional, requires `qdrant-client`)
   - `ChromaVectorStore` (optional, requires `chromadb`)
   - `FaissVectorStore` (optional, requires `faiss-cpu` and `numpy`)
@@ -41,10 +42,62 @@ Lightweight Python ORM-style toolkit
     - Enum decode is best-effort (falls back to scalar if enum class is not resolvable at runtime)
   - ID policy:
     - Qdrant requires UUID string IDs.
-    - InMemory/Chroma/Faiss accept generic string IDs.
+    - InMemory/PgVector/Chroma/Faiss accept generic string IDs.
   - Filter policy (`query(..., filters={...})`):
-    - InMemory/Chroma/Qdrant support basic payload equality filters.
+    - InMemory/PgVector/Chroma/Qdrant support basic payload equality filters.
     - Faiss does not support payload filters and raises `NotImplementedError`.
+
+## Docker Compose (services for examples/tests)
+
+The repository includes `docker-compose.yml` with required external services:
+
+- `postgres` (`pgvector/pgvector:pg16`) for Postgres + PgVector examples.
+- `mysql` (`mysql:8.4`) for MySQL examples.
+- `qdrant` (`qdrant/qdrant:latest`) for host-server Qdrant tests.
+- `chroma` (`chromadb/chroma:latest`) for host-server Chroma tests.
+
+Run services:
+
+```bash
+docker compose up -d
+docker compose ps
+```
+
+Stop and remove:
+
+```bash
+docker compose down
+```
+
+Use the same env variables already read by examples:
+
+```bash
+export MINI_ORM_PG_HOST=localhost
+export MINI_ORM_PG_PORT=5432
+export MINI_ORM_PG_USER=postgres
+export MINI_ORM_PG_PASSWORD=password
+export MINI_ORM_PG_DATABASE=postgres
+
+export MINI_ORM_MYSQL_HOST=localhost
+export MINI_ORM_MYSQL_PORT=3306
+export MINI_ORM_MYSQL_USER=root
+export MINI_ORM_MYSQL_PASSWORD=password
+export MINI_ORM_MYSQL_DATABASE=mini_orm_test
+
+export MINI_ORM_QDRANT_HTTP_PORT=6333
+export MINI_ORM_QDRANT_GRPC_PORT=6334
+export MINI_ORM_QDRANT_URL=http://localhost:6333
+
+export MINI_ORM_CHROMA_PORT=8000
+export MINI_ORM_CHROMA_HOST=localhost
+```
+
+Enable host-server vector integration tests (Qdrant/Chroma):
+
+```bash
+export MINI_ORM_VECTOR_HOST_TESTS=1
+python -m unittest tests.test_vector_qdrant_store tests.test_vector_chroma_store
+```
 
 ## Quick usage (SQL)
 

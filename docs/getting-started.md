@@ -12,6 +12,14 @@ pip install -r requirements-docs.txt
 
 For runtime SQL usage, install your DB-API driver (for example `sqlite3` is built in, `psycopg`, `mysqlclient`, etc.).
 
+For Postgres/MySQL/Qdrant/Chroma examples and integration tests that need
+running database services, you can start
+the bundled compose stack:
+
+```bash
+docker compose up -d
+```
+
 For Qdrant support:
 
 ```bash

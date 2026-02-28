@@ -28,6 +28,7 @@ Lightweight Python ORM-style toolkit.
 - SQL dialect adapters: SQLite, Postgres, MySQL.
 - Vector abstraction via `VectorRepository` / `AsyncVectorRepository`:
   - `InMemoryVectorStore` (built-in)
+  - `PgVectorStore` (PostgreSQL + pgvector extension)
   - `QdrantVectorStore` (optional, requires `qdrant-client`)
   - `ChromaVectorStore` (optional, requires `chromadb`)
   - `FaissVectorStore` (optional, requires `faiss-cpu` and `numpy`)

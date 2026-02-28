@@ -8,6 +8,7 @@ Vector features are exposed through:
 
 Optional backends included in this project:
 
+- `PgVectorStore` (PostgreSQL + pgvector extension)
 - `QdrantVectorStore`
 - `ChromaVectorStore`
 - `FaissVectorStore`

@@ -13,6 +13,7 @@ from .vector import (
     ChromaVectorStore,
     FaissVectorStore,
     InMemoryVectorStore,
+    PgVectorStore,
     QdrantVectorStore,
 )
 
@@ -25,6 +26,7 @@ __all__ = [
     "InMemoryVectorStore",
     "MySQLDialect",
     "PoolConnector",
+    "PgVectorStore",
     "PostgresDialect",
     "QdrantVectorStore",
     "SQLiteDialect",
