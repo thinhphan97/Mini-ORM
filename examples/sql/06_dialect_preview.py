@@ -2,30 +2,18 @@
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
-
-# Allow running this script directly from repository root.
-PROJECT_ROOT = next(
-    (parent for parent in Path(__file__).resolve().parents if (parent / "mini_orm").exists()),
-    None,
-)
-if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from mini_orm import C, OrderBy, create_table_sql
 from mini_orm.core.query_builder import append_limit_offset, compile_order_by, compile_where
 from mini_orm.ports.db_api.dialects import MySQLDialect, PostgresDialect, SQLiteDialect
-
 
 @dataclass
 class PreviewUser:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
     email: str = ""
     age: Optional[int] = None
-
 
 def show_for_dialect(name: str, dialect) -> None:  # noqa: ANN001
     print(f"\n===== {name} =====")
@@ -46,12 +34,10 @@ def show_for_dialect(name: str, dialect) -> None:  # noqa: ANN001
     print("Params:", params)
     print("DDL:", create_table_sql(PreviewUser, dialect))
 
-
 def main() -> None:
     show_for_dialect("SQLiteDialect", SQLiteDialect())
     show_for_dialect("PostgresDialect", PostgresDialect())
     show_for_dialect("MySQLDialect", MySQLDialect())
-
 
 if __name__ == "__main__":
     main()

@@ -3,7 +3,23 @@
 This folder contains runnable scripts that demonstrate every major feature
 currently supported by this codebase.
 
-Run examples from project root:
+## Run examples
+
+Run from project root.
+
+Recommended (Makefile):
+
+```bash
+make examples
+make examples-sql
+make examples-vector
+
+# run a single example
+make example-sql FILE=examples/sql/01_basic_crud.py
+make example-vector FILE=examples/vector/01_inmemory_basic.py
+```
+
+Or run scripts directly:
 
 ```bash
 python examples/sql/01_basic_crud.py
@@ -21,6 +37,7 @@ python examples/sql/12_unified_repository.py
 python examples/sql/13_async_unified_repository.py
 python examples/sql/14_validated_model.py
 python examples/sql/15_validated_repository_sqlite.py
+python examples/sql/16_postgres_pgvector_integration.py
 
 python examples/vector/01_inmemory_basic.py
 python examples/vector/02_inmemory_metrics_and_filters.py
@@ -33,7 +50,20 @@ python examples/vector/08_async_inmemory_basic.py
 python examples/vector/09_async_qdrant_example.py
 python examples/vector/10_async_chroma_example.py
 python examples/vector/11_async_faiss_example.py
+python examples/vector/12_pgvector_example.py
 ```
+
+## External services (optional)
+
+Some examples require running services (Postgres/PgVector, MySQL, Qdrant, Chroma).
+You can start the bundled stack from the project root:
+
+```bash
+make compose-up
+make compose-ps
+```
+
+Connection settings are read from environment variables (see the repository `README.md`).
 
 ## SQL examples
 
@@ -113,6 +143,12 @@ python examples/vector/11_async_faiss_example.py
   - Uses `auto_schema=True` for first-use setup.
   - Shows friendly invalid-input handling before data is written.
 
+- `examples/sql/16_postgres_pgvector_integration.py`
+  - PostgreSQL integration example that uses one `Database` connection for both:
+    - SQL `Repository` (CRUD)
+    - `PgVectorStore` + `VectorRepository` (vector search)
+  - Requires a running PostgreSQL server with pgvector, plus `psycopg`/`psycopg2`.
+
 ## Vector examples
 
 - `examples/vector/01_inmemory_basic.py`
@@ -158,9 +194,14 @@ python examples/vector/11_async_faiss_example.py
   - Async Faiss usage and unsupported-filter behavior.
   - Optional dependency script.
 
+- `examples/vector/12_pgvector_example.py`
+  - PgVector usage with `PgVectorStore` + `VectorRepository`.
+  - Requires a running PostgreSQL server with pgvector, plus `psycopg`/`psycopg2`.
+
 ## Optional dependency install
 
 ```bash
+pip install psycopg
 pip install qdrant-client
 pip install chromadb
 pip install faiss-cpu numpy

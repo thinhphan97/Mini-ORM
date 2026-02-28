@@ -41,12 +41,14 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  - Examples: examples.md
   - SQL ORM:
       - Overview: sql/overview.md
       - Schema & Indexing: sql/schema-indexing.md
       - Repository Queries: sql/repository.md
   - Vector:
       - Overview: vector/overview.md
+      - PgVector Adapter: vector/pgvector.md
       - Qdrant Adapter: vector/qdrant.md
       - Chroma Adapter: vector/chroma.md
       - Faiss Adapter: vector/faiss.md
