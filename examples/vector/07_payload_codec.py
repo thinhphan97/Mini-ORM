@@ -2,17 +2,7 @@
 
 from __future__ import annotations
 
-import sys
 from enum import Enum
-from pathlib import Path
-
-# Allow running this script directly from repository root.
-PROJECT_ROOT = next(
-    (parent for parent in Path(__file__).resolve().parents if (parent / "mini_orm").exists()),
-    None,
-)
-if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from mini_orm import (
     InMemoryVectorStore,
@@ -21,11 +11,9 @@ from mini_orm import (
     VectorRepository,
 )
 
-
 class Status(str, Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
-
 
 def main() -> None:
     store = InMemoryVectorStore()
@@ -60,7 +48,6 @@ def main() -> None:
 
     filtered = repo.query([1.0, 0.0], top_k=5, filters={"status": Status.ACTIVE})
     print("Filter by enum status:", [item.id for item in filtered])
-
 
 if __name__ == "__main__":
     main()

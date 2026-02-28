@@ -3,18 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
-import sys
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
-
-# Allow running this script directly from repository root.
-PROJECT_ROOT = next(
-    (parent for parent in Path(__file__).resolve().parents if (parent / "mini_orm").exists()),
-    None,
-)
-if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from mini_orm import (
     Database,
@@ -24,7 +14,6 @@ from mini_orm import (
     ValidationError,
     ValidatedModel,
 )
-
 
 @dataclass
 class Customer(ValidatedModel):
@@ -39,7 +28,6 @@ class Customer(ValidatedModel):
     )
     full_name: str = field(default="", metadata={"non_empty": True, "min_len": 2})
     age: int = field(default=0, metadata={"ge": 13, "le": 120})
-
 
 def create_customer(
     repo: Repository[Customer],
@@ -61,7 +49,6 @@ def create_customer(
         return
 
     print("Created:", created)
-
 
 def main() -> None:
     pool = PoolConnector(
@@ -93,7 +80,6 @@ def main() -> None:
         print("Stored customers:", all_customers)
     finally:
         db.close(close_pool=True)
-
 
 if __name__ == "__main__":
     main()

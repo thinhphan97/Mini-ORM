@@ -3,16 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
-from pathlib import Path
-
-# Allow running this script directly from repository root.
-PROJECT_ROOT = next(
-    (parent for parent in Path(__file__).resolve().parents if (parent / "mini_orm").exists()),
-    None,
-)
-if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from mini_orm import (
     AsyncVectorRepository,
@@ -20,7 +10,6 @@ from mini_orm import (
     VectorMetric,
     VectorRecord,
 )
-
 
 async def main() -> None:
     try:
@@ -68,7 +57,6 @@ async def main() -> None:
         await repo.upsert([VectorRecord("not-a-uuid", [1.0, 0.0, 0.0], {"group": "x"})])
     except ValueError as exc:
         print("Expected UUID policy error:", exc)
-
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -4,18 +4,8 @@ from __future__ import annotations
 
 import importlib
 import os
-import sys
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Optional
-
-# Allow running this script directly from repository root.
-PROJECT_ROOT = next(
-    (parent for parent in Path(__file__).resolve().parents if (parent / "mini_orm").exists()),
-    None,
-)
-if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from mini_orm import (
     Database,
@@ -26,7 +16,6 @@ from mini_orm import (
     VectorRecord,
     VectorRepository,
 )
-
 
 def _load_connect() -> Any:
     for module_name in ("psycopg", "psycopg2"):
@@ -39,7 +28,6 @@ def _load_connect() -> Any:
             return connect
     return None
 
-
 @dataclass
 class Document:
     __table__ = "pgvector_docs"
@@ -47,7 +35,6 @@ class Document:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
     title: str = field(default="")
     category: str = field(default="")
-
 
 def main() -> None:
     connect = _load_connect()
@@ -107,7 +94,6 @@ def main() -> None:
             print("-", docs_by_id.get(hit.id), "score=", round(hit.score, 6))
     finally:
         db.close()
-
 
 if __name__ == "__main__":
     main()

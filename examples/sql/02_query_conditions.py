@@ -3,21 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
-import sys
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
 
-# Allow running this script directly from repository root.
-PROJECT_ROOT = next(
-    (parent for parent in Path(__file__).resolve().parents if (parent / "mini_orm").exists()),
-    None,
-)
-if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 from mini_orm import C, Database, OrderBy, Repository, SQLiteDialect, apply_schema
-
 
 @dataclass
 class Account:
@@ -27,7 +16,6 @@ class Account:
     role: str = "user"
     active: bool = True
     deleted_at: Optional[str] = None
-
 
 def seed(repo: Repository[Account]) -> None:
     repo.insert_many(
@@ -46,7 +34,6 @@ def seed(repo: Repository[Account]) -> None:
             ),
         ]
     )
-
 
 def main() -> None:
     conn = sqlite3.connect(":memory:")
@@ -120,7 +107,6 @@ def main() -> None:
         print("Exists superadmin:", has_superadmin)
     finally:
         conn.close()
-
 
 if __name__ == "__main__":
     main()

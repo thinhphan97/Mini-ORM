@@ -5,25 +5,14 @@ from __future__ import annotations
 import asyncio
 import importlib
 import os
-import sys
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Optional
-
-# Allow running this script directly from repository root.
-PROJECT_ROOT = next(
-    (parent for parent in Path(__file__).resolve().parents if (parent / "mini_orm").exists()),
-    None,
-)
-if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from mini_orm import (
     AsyncDatabase,
     AsyncRepository,
     PostgresDialect,
 )
-
 
 def _load_connect() -> Any:
     for module_name in ("psycopg", "psycopg2"):
@@ -36,13 +25,11 @@ def _load_connect() -> Any:
             return connect
     return None
 
-
 @dataclass
 class User:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
     email: str = field(default="")
     age: Optional[int] = None
-
 
 async def main() -> None:
     connect = _load_connect()
@@ -92,7 +79,6 @@ async def main() -> None:
         print("After delete:", await repo.list())
     finally:
         conn.close()
-
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -4,17 +4,7 @@ from __future__ import annotations
 
 import importlib
 import os
-import sys
-from pathlib import Path
 from typing import Any
-
-# Allow running this script directly from repository root.
-PROJECT_ROOT = next(
-    (parent for parent in Path(__file__).resolve().parents if (parent / "mini_orm").exists()),
-    None,
-)
-if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from mini_orm import (
     Database,
@@ -24,7 +14,6 @@ from mini_orm import (
     VectorRecord,
     VectorRepository,
 )
-
 
 def _load_connect() -> Any:
     for module_name in ("psycopg", "psycopg2"):
@@ -36,7 +25,6 @@ def _load_connect() -> Any:
         if connect is not None:
             return connect
     return None
-
 
 def main() -> None:
     connect = _load_connect()
@@ -91,7 +79,6 @@ def main() -> None:
         )
     finally:
         db.close()
-
 
 if __name__ == "__main__":
     main()

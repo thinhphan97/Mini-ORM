@@ -165,6 +165,7 @@ make test-vector
 ## Continue reading
 
 - [Getting Started](getting-started.md)
+- [Examples](examples.md)
 - [SQL Overview](sql/overview.md)
 - [Vector Overview](vector/overview.md)
 - [API Reference](api/package.md)

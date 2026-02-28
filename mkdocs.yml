@@ -41,6 +41,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  - Examples: examples.md
   - SQL ORM:
       - Overview: sql/overview.md
       - Schema & Indexing: sql/schema-indexing.md
