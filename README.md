@@ -1,52 +1,51 @@
-# mini_orm
+<p align="center">
+  <img src="docs/assets/icon.png" width="160" alt="mini_orm logo" />
+</p>
 
-Lightweight Python ORM-style toolkit.
+<h1 align="center">mini_orm</h1>
 
-## What it supports
+<p align="center">
+  Dataclass-first repositories for SQL and vector stores (sync + async).
+</p>
 
-- Dataclass-based SQL models.
-- Optional pydantic-like dataclass input validation via `ValidatedModel`.
-- Single-table CRUD via `Repository[T]`.
-- Multi-table routing via one hub object: `UnifiedRepository`
-  (model-class routing, with object-only mutation support).
-- Optional schema auto-sync on first action (or during `register(...)`):
-  `auto_schema=True` (with `schema_conflict` policy).
-- Optional strict table registry before actions: `require_registration=True` + `register(...)`.
-- Model relations inferred from `fk` metadata (or explicit `__relations__` override), including:
-  - create with nested relation data (`repo.create(..., relations=...)`)
-  - eager loading (`get_related`, `list_related`)
-- Safe query building (`where`, `AND/OR/NOT`, `order by`, `limit`, `offset`).
-- Repository utility APIs: `count`, `exists`, `insert_many`, `update_where`, `delete_where`, `get_or_create`.
-- Field codecs for DB I/O:
-  - Enum <-> scalar (`Enum.value`)
-  - JSON <-> Python structures (`dict`/`list`, or explicit `metadata={"codec": "json"}`)
-- Schema generation from model metadata.
-- Foreign keys via field metadata `fk`.
-- Index support:
-  - Field metadata (`index`, `unique_index`, `index_name`)
-  - Multi-column indexes via `__indexes__`
-  - One-call schema apply with `apply_schema(...)`
-  - Idempotent mode with `if_not_exists=True`
-- SQL dialect adapters: SQLite, Postgres, MySQL (DB-API style).
-- Async SQL APIs with same repository method names:
-  - `AsyncDatabase`, `AsyncRepository[T]`, `AsyncUnifiedRepository`, `apply_schema_async(...)`
-- Async vector APIs with same repository method names:
-  - `AsyncVectorRepository`
-- Vector abstraction via `VectorRepository`:
-  - `InMemoryVectorStore` (built-in)
-  - `PgVectorStore` (PostgreSQL + pgvector extension)
-  - `QdrantVectorStore` (optional, requires `qdrant-client`)
-  - `ChromaVectorStore` (optional, requires `chromadb`)
-  - `FaissVectorStore` (optional, requires `faiss-cpu` and `numpy`)
-  - Optional payload codec for metadata/filter I/O
-    (`IdentityVectorPayloadCodec`, `JsonVectorPayloadCodec`)
-    - Enum decode is best-effort (falls back to scalar if enum class is not resolvable at runtime)
-  - ID policy:
-    - Qdrant requires UUID string IDs.
-    - InMemory/PgVector/Chroma/Faiss accept generic string IDs.
-  - Filter policy (`query(..., filters={...})`):
-    - InMemory/PgVector/Chroma/Qdrant support basic payload equality filters.
-    - Faiss does not support payload filters and raises `NotImplementedError`.
+<p align="center">
+  <a href="https://thinhphan97.github.io/Mini-ORM/">Docs</a> ·
+  <a href="https://thinhphan97.github.io/Mini-ORM/examples/">Examples</a> ·
+  <a href="https://thinhphan97.github.io/Mini-ORM/api/package/">API</a>
+</p>
+
+<p align="center">
+  <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-blue" />
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-green" />
+  <img alt="status" src="https://img.shields.io/badge/status-experimental-orange" />
+</p>
+
+## Features
+
+- SQL repositories over DB-API connections (SQLite, Postgres, MySQL).
+- Dataclass models + schema generation (`apply_schema`, `auto_schema`).
+- Relations from FK metadata (`create(..., relations=...)`, `get_related`, `list_related`).
+- Safe query building (`C.*`, `OrderBy`, pagination).
+- Sync + async APIs with matching method names.
+- Vector repositories with multiple backends (InMemory, PgVector, Qdrant, Chroma, Faiss).
+- Optional dataclass validation via `ValidatedModel`.
+
+## Install
+
+From source:
+
+```bash
+pip install -e .
+```
+
+Optional extras:
+
+```bash
+pip install -e '.[qdrant]'
+pip install -e '.[chroma]'
+pip install -e '.[faiss]'
+pip install -e '.[docs]'
+```
 
 ## Docker Compose (services for examples/tests)
 
@@ -94,29 +93,6 @@ export MINI_ORM_QDRANT_URL=http://localhost:6333
 export MINI_ORM_CHROMA_PORT=8000
 export MINI_ORM_CHROMA_HOST=localhost
 ```
-
-## Run tests with Makefile
-
-```bash
-make test
-make test-vector
-```
-
-Run host-server vector integration tests (Qdrant/Chroma/PgVector):
-
-```bash
-make test-vector-host
-```
-
-Run only the PgVector host SQL+vector integration test:
-
-```bash
-make test-pgvector-host
-```
-
-Notes:
-- `test-vector-host` and `test-pgvector-host` already set `MINI_ORM_VECTOR_HOST_TESTS=1`.
-- For PgVector host tests, make sure PostgreSQL env is set (`MINI_ORM_PG_HOST`, `MINI_ORM_PG_PORT`, `MINI_ORM_PG_USER`, `MINI_ORM_PG_PASSWORD`, `MINI_ORM_PG_DATABASE`).
 
 ## Quick usage (SQL)
 
@@ -182,6 +158,32 @@ hub = UnifiedRepository(db, auto_schema=True, require_registration=True)
 hub.register_many([User])
 hub.insert(User(email="alice@example.com"))  # model inferred from object
 rows = hub.list(User)
+```
+
+## Quick usage (Session)
+
+```python
+from mini_orm import Session
+
+session = Session(db, auto_schema=True)
+with session:
+    alice = session.insert(User(email="alice@example.com"))
+    _ = session.insert(User(email="bob@example.com"))
+
+rows = session.list(User)
+```
+
+Async session:
+
+```python
+from mini_orm import AsyncSession
+
+async def main() -> None:
+    session = AsyncSession(async_db, auto_schema=True)
+    async with session:
+        await session.insert(User(email="alice@example.com"))
+        await session.insert(User(email="bob@example.com"))
+    rows = await session.list(User)
 ```
 
 ## SQL Repository Args (Sync + Async)
@@ -409,7 +411,18 @@ asyncio.run(main())
 ```bash
 make test
 make test-vector
+
+# host-server vector integration tests (Qdrant/Chroma/PgVector SQL+vector)
+make test-vector-host
+
+# PgVector SQL+vector integration tests on host PostgreSQL
+make test-pgvector-host
 ```
+
+Notes:
+- `test-vector-host` and `test-pgvector-host` set `MINI_ORM_VECTOR_HOST_TESTS=1`.
+- For PgVector host tests, make sure PostgreSQL env vars are set
+  (`MINI_ORM_PG_HOST`, `MINI_ORM_PG_PORT`, `MINI_ORM_PG_USER`, `MINI_ORM_PG_PASSWORD`, `MINI_ORM_PG_DATABASE`).
 
 ## Build library
 
@@ -439,9 +452,17 @@ To avoid this:
 
 ## Documentation site (MkDocs)
 
+Deployed docs: [https://thinhphan97.github.io/Mini-ORM/](https://thinhphan97.github.io/Mini-ORM/)
+
 ```bash
 pip install -r requirements-docs.txt
 mkdocs serve
 ```
 
 More docs are in `docs/`.
+
+## Disclaimer
+
+This codebase is provided for learning and educational purposes only.
+The author/maintainers are not liable for any incidents, data loss, or damages
+resulting from using, integrating, or deploying this code in real environments.

@@ -1,137 +1,87 @@
-# mini_orm
+<p align="center">
+  <img src="assets/icon.png" width="160" alt="mini_orm logo" />
+</p>
 
-Lightweight Python ORM-style toolkit.
+<h1 align="center">mini_orm</h1>
 
-## What it supports
+<p align="center">
+  Dataclass-first repositories for SQL and vector stores (sync + async).
+</p>
 
-- Dataclass-based SQL models.
-- Single-table CRUD via `Repository[T]`.
-- Multi-model routing with one hub object via `UnifiedRepository`
-  (object-only mutation support included).
-- Async SQL flow via `AsyncRepository[T]`, `AsyncUnifiedRepository`, and `AsyncDatabase`.
-- Optional schema auto-sync with `auto_schema=True` and conflict policy `schema_conflict`.
-- Optional strict registration with `require_registration=True` and `register(..., ensure=...)`.
-- Model relations inferred from FK metadata (`fk`, `relation`, `related_name`) with
-  nested create and eager-loading (`get_related`, `list_related`).
-- Safe query building (`where`, `AND/OR/NOT`, `order by`, `limit`, `offset`).
-- Repository utility APIs: `count`, `exists`, `insert_many`, `update_where`, `delete_where`, `get_or_create`.
-- Field codecs for DB I/O:
-  - Enum <-> scalar (`Enum.value`)
-  - JSON <-> Python structures (`dict`/`list`, or explicit `metadata={"codec": "json"}`)
-- Schema generation from model metadata.
-- Index support:
-  - Field metadata (`index`, `unique_index`, `index_name`)
-  - Multi-column indexes via `__indexes__`
-  - One-call schema apply with `apply_schema(...)`
-  - Async schema apply with `apply_schema_async(...)`
-  - Idempotent mode with `if_not_exists=True`
-- SQL dialect adapters: SQLite, Postgres, MySQL.
-- Vector abstraction via `VectorRepository` / `AsyncVectorRepository`:
-  - `InMemoryVectorStore` (built-in)
-  - `PgVectorStore` (PostgreSQL + pgvector extension)
-  - `QdrantVectorStore` (optional, requires `qdrant-client`)
-  - `ChromaVectorStore` (optional, requires `chromadb`)
-  - `FaissVectorStore` (optional, requires `faiss-cpu` and `numpy`)
-  - Optional payload codec for metadata/filter I/O
-    (`IdentityVectorPayloadCodec`, `JsonVectorPayloadCodec`)
+<p align="center">
+  <a href="./">Docs</a> ·
+  <a href="examples/">Examples</a> ·
+  <a href="api/package/">API</a>
+</p>
 
-## Quick usage (SQL)
+<p align="center">
+  <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-blue" />
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-green" />
+  <img alt="status" src="https://img.shields.io/badge/status-experimental-orange" />
+</p>
+
+## Features
+
+- SQL repositories over DB-API connections (SQLite, Postgres, MySQL).
+- Dataclass models + schema generation (`apply_schema`, `auto_schema`).
+- Relations from FK metadata (`create(..., relations=...)`, `get_related`, `list_related`).
+- Safe query building (`C.*`, `OrderBy`, pagination).
+- Sync + async APIs with matching method names.
+- Vector repositories with multiple backends (InMemory, PgVector, Qdrant, Chroma, Faiss).
+- Optional dataclass validation via `ValidatedModel`.
+
+## Install
+
+```bash
+pip install -e .
+```
+
+Optional extras:
+
+```bash
+pip install -e '.[qdrant]'
+pip install -e '.[chroma]'
+pip install -e '.[faiss]'
+pip install -e '.[docs]'
+```
+
+## Quick Usage (SQL)
 
 ```python
 from dataclasses import dataclass, field
 from typing import Optional
 import sqlite3
 
-from mini_orm import Database, SQLiteDialect, Repository, C, apply_schema
+from mini_orm import C, Database, Repository, SQLiteDialect
 
 @dataclass
 class User:
     id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
-    email: str = field(default="", metadata={"index": True})
+    email: str = ""
 
 conn = sqlite3.connect(":memory:")
 db = Database(conn, SQLiteDialect())
-repo = Repository[User](db, User)
-
-apply_schema(db, User)
+repo = Repository[User](db, User, auto_schema=True)
 repo.insert(User(email="alice@example.com"))
-rows = repo.list(where=C.eq("email", "alice@example.com"))
-
-rows = repo.list(
-    where=C.or_(
-        C.eq("email", "alice@example.com"),
-        C.eq("email", "bob@example.com"),
-    ),
-    limit=10,
-)
-total = repo.count(where=C.like("email", "%@example.com"))
+rows = repo.list(where=C.like("email", "%@example.com"))
 ```
 
-## Quick usage (Async SQL)
+## Quick Usage (Session)
 
 ```python
-import asyncio
-import sqlite3
-from dataclasses import dataclass, field
-from typing import Optional
+from mini_orm import Session
 
-from mini_orm import AsyncDatabase, AsyncRepository, SQLiteDialect
-
-@dataclass
-class User:
-    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
-    email: str = field(default="", metadata={"index": True})
-
-async def main() -> None:
-    conn = sqlite3.connect(":memory:")
-    db = AsyncDatabase(conn, SQLiteDialect())
-    try:
-        repo = AsyncRepository[User](db, User, auto_schema=True)
-        await repo.insert(User(email="alice@example.com"))
-        rows = await repo.list()
-        print(rows)
-    finally:
-        conn.close()
-
-asyncio.run(main())
+session = Session(db, auto_schema=True)
+with session:
+    session.insert(User(email="alice@example.com"))
+    session.insert(User(email="bob@example.com"))
+rows = session.list(User)
 ```
 
-## Relations via metadata (quick view)
+## Quick Usage (Vector)
 
 ```python
-from dataclasses import dataclass, field
-from typing import Optional
-
-@dataclass
-class Author:
-    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
-    name: str = ""
-
-@dataclass
-class Post:
-    id: Optional[int] = field(default=None, metadata={"pk": True, "auto": True})
-    author_id: Optional[int] = field(
-        default=None,
-        metadata={
-            "fk": (Author, "id"),
-            "relation": "author",
-            "related_name": "posts",
-        },
-    )
-    title: str = ""
-```
-
-Inferred relations:
-- `Post.author` (`belongs_to`)
-- `Author.posts` (`has_many`)
-
-Detailed guide:
-- [`docs/sql/repository.md`](sql/repository.md#relations-create-and-query) section "Relations (create and query)"
-
-## Quick usage (Vector)
-
-```python
-from mini_orm import InMemoryVectorStore, VectorMetric, VectorRepository, VectorRecord
+from mini_orm import InMemoryVectorStore, VectorMetric, VectorRecord, VectorRepository
 
 store = InMemoryVectorStore()
 repo = VectorRepository(store, "items", dimension=3, metric=VectorMetric.COSINE)
@@ -139,30 +89,16 @@ repo.upsert([VectorRecord(id="1", vector=[0.1, 0.2, 0.3])])
 hits = repo.query([0.1, 0.2, 0.25], top_k=5)
 ```
 
-## Quick usage (Async Vector)
-
-```python
-import asyncio
-from mini_orm import AsyncVectorRepository, InMemoryVectorStore, VectorRecord
-
-async def main() -> None:
-    store = InMemoryVectorStore()
-    repo = AsyncVectorRepository(store, "items", dimension=3)
-    await repo.upsert([VectorRecord(id="1", vector=[0.1, 0.2, 0.3])])
-    hits = await repo.query([0.1, 0.2, 0.25], top_k=5)
-    print(hits)
-
-asyncio.run(main())
-```
-
-## Run tests
+## Dev Commands
 
 ```bash
 make test
 make test-vector
+make compose-up
+make compose-down
 ```
 
-## Continue reading
+## Continue Reading
 
 - [Getting Started](getting-started.md)
 - [Examples](examples.md)
