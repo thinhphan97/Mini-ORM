@@ -467,6 +467,8 @@ To avoid this:
 
 ## Documentation site (MkDocs)
 
+Deployed docs: [https://thinhphan97.github.io/Mini-ORM/](https://thinhphan97.github.io/Mini-ORM/)
+
 ```bash
 pip install -r requirements-docs.txt
 mkdocs serve
