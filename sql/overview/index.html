@@ -22,7 +22,7 @@
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/icon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.3">
     
     
@@ -86,8 +86,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="mini_orm" class="md-header__button md-logo" aria-label="mini_orm" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../../assets/icon.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -333,8 +332,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="mini_orm" class="md-nav__button md-logo" aria-label="mini_orm" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../../assets/icon.png" alt="logo">
 
     </a>
     mini_orm
@@ -573,6 +571,17 @@
     <span class="md-ellipsis">
       
         Unified hub (multi-model)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#session-wrapper-transaction-unified-hub" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session wrapper (transaction + unified hub)
       
     </span>
   </a>
@@ -1139,6 +1148,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#session-wrapper-transaction-unified-hub" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session wrapper (transaction + unified hub)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#args-quick-reference" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1219,6 +1239,7 @@
 <li>Use <code>Repository[T]</code> for single-model access, or <code>UnifiedRepository</code> when one
    hub object should route by model class.
    Mutation methods can infer model from object (<code>hub.insert(User(...))</code>).
+   Optionally use <code>Session</code> to keep one transaction scope while still using unified routing.
    Optionally set <code>auto_schema=True</code> to create/sync schema automatically on first action
    (or when calling <code>register(...)</code>).
    Set <code>require_registration=True</code> if you want explicit model registration before actions.</li>
@@ -1232,6 +1253,7 @@
    for one async hub object routing by model class, with the same method names as sync
    (<code>insert</code>, <code>get</code>, <code>list</code>, <code>update</code>, <code>delete</code>, ...), but with <code>await</code>.
    Async unified mutation methods can infer model from object as well.
+   Optionally use <code>AsyncSession</code> for one async transaction scope + unified routing.
    Optionally set <code>auto_schema=True</code> for automatic schema ensure on first action
    (or when calling <code>register(...)</code>).
    Set <code>require_registration=True</code> for explicit registration workflow.</li>
@@ -1260,6 +1282,24 @@
     <span class="nb">print</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="n">rows</span><span class="p">)</span>
 
 <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</code></pre></div>
+<h2 id="session-wrapper-transaction-unified-hub">Session wrapper (transaction + unified hub)<a class="headerlink" href="#session-wrapper-transaction-unified-hub" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">mini_orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">Session</span><span class="p">,</span> <span class="n">AsyncSession</span>
+
+<span class="c1"># sync</span>
+<span class="n">session</span> <span class="o">=</span> <span class="n">Session</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">auto_schema</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">session</span><span class="p">:</span>
+    <span class="n">session</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">User</span><span class="p">(</span><span class="n">email</span><span class="o">=</span><span class="s2">&quot;alice@example.com&quot;</span><span class="p">))</span>
+    <span class="n">session</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">User</span><span class="p">(</span><span class="n">email</span><span class="o">=</span><span class="s2">&quot;bob@example.com&quot;</span><span class="p">))</span>
+<span class="n">rows</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="n">User</span><span class="p">)</span>
+
+<span class="c1"># async</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">async_session</span> <span class="o">=</span> <span class="n">AsyncSession</span><span class="p">(</span><span class="n">async_db</span><span class="p">,</span> <span class="n">auto_schema</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">async_session</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">async_session</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">User</span><span class="p">(</span><span class="n">email</span><span class="o">=</span><span class="s2">&quot;alice@example.com&quot;</span><span class="p">))</span>
+        <span class="k">await</span> <span class="n">async_session</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">User</span><span class="p">(</span><span class="n">email</span><span class="o">=</span><span class="s2">&quot;bob@example.com&quot;</span><span class="p">))</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="k">await</span> <span class="n">async_session</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="n">User</span><span class="p">)</span>
 </code></pre></div>
 <p><code>schema_conflict</code> controls incompatible changes:
 - <code>"raise"</code> (default): raise clear error.
