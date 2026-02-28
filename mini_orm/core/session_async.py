@@ -46,7 +46,7 @@ class AsyncSession:
     async def begin(self):
         """Run operations in one commit/rollback transaction block."""
 
-        async with self.db.transaction():
+        async with self:
             yield self
 
     def transaction(self) -> contextlib.AbstractAsyncContextManager[AsyncSession]:

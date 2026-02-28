@@ -175,8 +175,15 @@ class Session:
         if self._active_tx is not None:
             raise RuntimeError("session transaction is already active")
         tx = self.db.transaction()
-        tx.__enter__()
-        self._active_tx = tx
+        entered = False
+        try:
+            tx.__enter__()
+            entered = True
+            self._active_tx = tx
+        except BaseException as exc:
+            if entered:
+                tx.__exit__(type(exc), exc, exc.__traceback__)
+            raise
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool | None:
